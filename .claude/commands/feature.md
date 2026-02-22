@@ -12,7 +12,7 @@ Context — project architecture:
 `docs/architecture.md`
 
 
-Produce a feature design document `docs/feature-name.md`:
+Produce a feature design document `docs/features/feature-name.md`:
 
 # Design: [Feature Name]
 
