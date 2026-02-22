@@ -1,0 +1,53 @@
+[project]
+name = "git-projects"
+version = "0.1.0"
+description = "History of git projects"
+readme = "README.md"
+authors = [
+    { name = "Jev Kuznetsov", email = "jev.kuznetsov@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "typer>=0.12",
+]
+
+[project.scripts]
+git-projects = "git_projects.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.8.8,<0.9.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "invoke>=2.2.0",
+    "mypy>=1.10",
+    "pytest>=8.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.4",
+]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+extend-select = ["B", "I", "C4", "TID", "SIM", "PLE", "RUF"]
+ignore = [
+    "D100", "D101", "D102", "D103",  # Missing docstrings
+    "N806", "N803",  # Invalid name patterns
+    "G201",  # Logging f-string interpolation
+    "ARG001",  # Unused function argument
+    "BLE001",  # Blind except
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["ARG001"]  # Allow unused arguments in tests

@@ -1,0 +1,19 @@
+{
+  "template": "git@git.roxautomation.com:sjev/python-cli-template.git",
+  "commit": "cbb2dd44f360945d7837d438cc1a64d90f32f338",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "project_name": "git-projects",
+      "project_slug": "git-projects",
+      "package_name": "git_projects",
+      "description": "History of git projects",
+      "author_name": "Jev Kuznetsov",
+      "author_email": "jev.kuznetsov@gmail.com",
+      "version": "0.1.0",
+      "year": "2026",
+      "_template": "git@git.roxautomation.com:sjev/python-cli-template.git"
+    }
+  },
+  "directory": null
+}
