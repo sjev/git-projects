@@ -48,7 +48,7 @@ def fetch_repos(
         if on_foundry_start:
             on_foundry_start(foundry_config.name)
 
-        repos = list_repos(foundry_config)
+        repos = list_repos(foundry_config, cfg.clone_url_format)
 
         if not show_all:
             repos = [

@@ -12,7 +12,7 @@ _TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
 _DEFAULT_URL = "https://api.github.com"
 
 
-def list_repos(config: FoundryConfig) -> list[RemoteRepo]:
+def list_repos(config: FoundryConfig, clone_url_format: str = "ssh") -> list[RemoteRepo]:
     """Fetch all owned repos from the GitHub API with pagination."""
     if not config.token:
         raise ValueError("GitHub token is not set.")
@@ -36,7 +36,10 @@ def list_repos(config: FoundryConfig) -> list[RemoteRepo]:
                 repos.append(
                     RemoteRepo(
                         name=item["name"],
-                        clone_url=item["clone_url"],
+                        repo_url=item["html_url"],
+                        clone_url=item["ssh_url"]
+                        if clone_url_format == "ssh"
+                        else item["clone_url"],
                         pushed_at=item["pushed_at"],
                         default_branch=item["default_branch"],
                         visibility=item["visibility"],

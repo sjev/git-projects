@@ -49,10 +49,11 @@ def format_repo(repo: RemoteRepo, width: int = 60, max_desc: int = 60) -> str:
     name_styled = typer.style(repo.name, bold=True)
     vis_styled = typer.style(vis_label, fg=vis_color)
     date_styled = typer.style(date, dim=True)
-    url_styled = typer.style(repo.clone_url, dim=True)
+    repo_url_styled = typer.style(repo.repo_url, dim=True)
+    clone_url_styled = typer.style(repo.clone_url, dim=True)
 
     name_line = name_styled + " " + vis_styled + " " * padding + date_styled
-    lines = [name_line, f"  {url_styled}"]
+    lines = [name_line, f"  {repo_url_styled}", f"  {clone_url_styled}"]
     if repo.description:
         desc = repo.description
         if len(desc) > max_desc:

@@ -12,7 +12,7 @@ _TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
 _DEFAULT_URL = "https://gitlab.com"
 
 
-def list_repos(config: FoundryConfig) -> list[RemoteRepo]:
+def list_repos(config: FoundryConfig, clone_url_format: str = "ssh") -> list[RemoteRepo]:
     """Fetch all owned repos from the GitLab API with pagination."""
     if not config.token:
         raise ValueError("GitLab token is not set.")
@@ -36,7 +36,10 @@ def list_repos(config: FoundryConfig) -> list[RemoteRepo]:
                 repos.append(
                     RemoteRepo(
                         name=item["name"],
-                        clone_url=item["http_url_to_repo"],
+                        repo_url=item["web_url"],
+                        clone_url=item["ssh_url_to_repo"]
+                        if clone_url_format == "ssh"
+                        else item["http_url_to_repo"],
                         pushed_at=item["last_activity_at"],
                         default_branch=item.get("default_branch") or "",
                         visibility=item["visibility"],

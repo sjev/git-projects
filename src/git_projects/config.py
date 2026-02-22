@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
@@ -9,6 +10,7 @@ from platformdirs import user_data_path
 
 DEFAULT_CONFIG = """\
 clone_root: ~/projects    # where repos get cloned
+clone_url_format: ssh     # "https" or "ssh"
 foundries:
   - name: github
     type: github
@@ -22,6 +24,8 @@ foundries:
   #   token: ""
 projects: []
 """
+
+_SSH_RE = re.compile(r"^git@[^:]+:(.+)$")
 
 
 @dataclass
@@ -44,6 +48,7 @@ class Config:
     clone_root: str
     foundries: list[FoundryConfig]
     projects: list[Project] = field(default_factory=list)
+    clone_url_format: str = "ssh"
 
 
 class ConfigExistsError(Exception):
@@ -96,6 +101,7 @@ def load_config() -> Config:
         clone_root=str(raw.get("clone_root", "")),
         foundries=foundries,
         projects=projects,
+        clone_url_format=str(raw.get("clone_url_format", "ssh")),
     )
 
 
@@ -105,6 +111,7 @@ def save_config(config: Config) -> Path:
     config_path.parent.mkdir(parents=True, exist_ok=True)
     data: dict[str, object] = {
         "clone_root": config.clone_root,
+        "clone_url_format": config.clone_url_format,
         "foundries": [
             {
                 k: v
@@ -122,8 +129,9 @@ def save_config(config: Config) -> Path:
 
 
 def derive_project(clone_url: str, clone_root: str) -> Project:
-    """Derive project name and path from a clone URL."""
-    parsed = urlparse(clone_url)
-    name = parsed.path.strip("/").removesuffix(".git").split("/")[-1]
+    """Derive project name and path from a clone URL (HTTPS or SSH SCP-style)."""
+    m = _SSH_RE.match(clone_url)
+    path_part = m.group(1) if m else urlparse(clone_url).path
+    name = path_part.strip("/").removesuffix(".git").split("/")[-1]
     local_path = str(Path(clone_root) / name)
     return Project(clone_url=clone_url, name=name, path=local_path)

@@ -127,7 +127,8 @@ def track(
         print(exc)
         raise typer.Exit(code=1) from None
 
-    print(f"Tracking {project.name} → {project.path}")
+    clone_url_styled = typer.style(project.clone_url, dim=True)
+    print(f"Tracking {project.name} → {project.path}\n  {clone_url_styled}")
 
 
 @app.command()
