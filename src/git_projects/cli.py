@@ -6,7 +6,8 @@ import httpx
 import typer
 
 from git_projects import config
-from git_projects.foundry import github
+from git_projects.formatting import format_repo
+from git_projects.services import fetch_repos, track_project, untrack_project
 
 app = typer.Typer(no_args_is_help=True)
 config_app = typer.Typer(no_args_is_help=True)
@@ -70,40 +71,33 @@ def _load_config_or_exit() -> config.Config:
 @app.command()
 def fetch(
     foundry_name: Annotated[str | None, typer.Argument(help="Foundry name to fetch from.")] = None,
+    show_all: Annotated[
+        bool, typer.Option("--show-all", help="Show all repos, not just recent ones.")
+    ] = False,
 ) -> None:
     """Fetch and print available repos from foundry APIs."""
     cfg = _load_config_or_exit()
 
-    foundries = cfg.foundries
-    if foundry_name:
-        foundries = [f for f in foundries if f.name == foundry_name]
-        if not foundries:
-            print(f"No foundry named '{foundry_name}' in config.")
-            raise typer.Exit(code=1)
+    try:
+        repos_by_foundry = fetch_repos(cfg, foundry_name, show_all=show_all)
+    except ValueError as exc:
+        print(exc)
+        raise typer.Exit(code=1) from None
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 401:
+            print(
+                f"Error: GitHub API returned 401 for foundry '{foundry_name}'. "
+                "Check your token."
+            )
+        else:
+            print(f"Error: GitHub API returned {exc.response.status_code}.")
+        raise typer.Exit(code=1) from None
 
-    for foundry_config in foundries:
-        if foundry_config.type == "github":
-            try:
-                repos = github.list_repos(foundry_config)
-            except ValueError:
-                print(
-                    f"Error: GitHub token is not set for foundry '{foundry_config.name}'. "
-                    "Edit config.yaml to add your token."
-                )
-                raise typer.Exit(code=1) from None
-            except httpx.HTTPStatusError as exc:
-                if exc.response.status_code == 401:
-                    print(
-                        f"Error: GitHub API returned 401 for foundry '{foundry_config.name}'. "
-                        "Check your token."
-                    )
-                else:
-                    print(f"Error: GitHub API returned {exc.response.status_code}.")
-                raise typer.Exit(code=1) from None
-
-            print(f"# {foundry_config.name} ({len(repos)} repos)")
-            for repo in repos:
-                print(f"  {repo.clone_url}")
+    for name, repos in repos_by_foundry.items():
+        print(f"# {name} ({len(repos)} repos)")
+        for repo in repos:
+            print()
+            print(format_repo(repo), end="")
 
 
 @app.command()
@@ -113,13 +107,12 @@ def track(
     """Add a project to tracking."""
     cfg = _load_config_or_exit()
 
-    if any(p.clone_url == clone_url for p in cfg.projects):
-        print(f"Already tracking: {clone_url}")
-        raise typer.Exit(code=1)
+    try:
+        project = track_project(cfg, clone_url)
+    except ValueError as exc:
+        print(exc)
+        raise typer.Exit(code=1) from None
 
-    project = config.derive_project(clone_url, cfg.clone_root)
-    cfg.projects.append(project)
-    config.save_config(cfg)
     print(f"Tracking {project.name} → {project.path}")
 
 
@@ -130,13 +123,12 @@ def untrack(
     """Remove a project from tracking."""
     cfg = _load_config_or_exit()
 
-    before = len(cfg.projects)
-    cfg.projects = [p for p in cfg.projects if p.name != name]
-    if len(cfg.projects) == before:
-        print(f"No project named '{name}' found.")
-        raise typer.Exit(code=1)
+    try:
+        untrack_project(cfg, name)
+    except ValueError as exc:
+        print(exc)
+        raise typer.Exit(code=1) from None
 
-    config.save_config(cfg)
     print(f"Untracked {name}")
 
 

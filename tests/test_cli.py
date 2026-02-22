@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,6 +13,11 @@ from git_projects.config import DEFAULT_CONFIG, Config, FoundryConfig, Project
 from git_projects.foundry import RemoteRepo
 
 runner = CliRunner()
+
+
+def _ts(delta: timedelta) -> str:
+    return (datetime.now(timezone.utc) - delta).strftime("%Y-%m-%dT%H:%M:%SZ")
+
 
 _GH_FOUNDRY = FoundryConfig(name="github", type="github", url="https://api.github.com", token="tok")
 
@@ -33,6 +39,17 @@ _REMOTE_REPOS = [
         description="",
     ),
 ]
+
+_OLD_REPO = RemoteRepo(
+    name="proj-old",
+    clone_url="https://github.com/user/proj-old.git",
+    pushed_at=_ts(timedelta(days=400)),
+    default_branch="main",
+    visibility="public",
+    description="An old experiment",
+)
+
+_REMOTE_REPOS_WITH_OLD = [*_REMOTE_REPOS, _OLD_REPO]
 
 
 def test_help() -> None:
@@ -124,22 +141,73 @@ def test_fetch_happy_path() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
     with (
+        patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
         patch("git_projects.cli.config.load_config", return_value=cfg),
-        patch("git_projects.cli.github.list_repos", return_value=_REMOTE_REPOS),
     ):
         result = runner.invoke(app, ["fetch"])
 
     assert result.exit_code == 0
-    assert "2 repos" in result.output
+    assert "# github (2 repos)" in result.output
+    assert "proj-a" in result.output
     assert "https://github.com/user/proj-a.git" in result.output
+    assert "A project" in result.output
+    assert "ago" in result.output
+
+
+def test_fetch_filters_old_repos_by_default() -> None:
+    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
+
+    with (
+        patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS_WITH_OLD),
+        patch("git_projects.cli.config.load_config", return_value=cfg),
+    ):
+        result = runner.invoke(app, ["fetch"])
+
+    assert result.exit_code == 0
+    assert "# github (2 repos)" in result.output
+    assert "proj-old" not in result.output
+
+
+def test_fetch_show_all_includes_old_repos() -> None:
+    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
+
+    with (
+        patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS_WITH_OLD),
+        patch("git_projects.cli.config.load_config", return_value=cfg),
+    ):
+        result = runner.invoke(app, ["fetch", "--show-all"])
+
+    assert result.exit_code == 0
+    assert "# github (3 repos)" in result.output
+    assert "proj-old" in result.output
+
+
+def test_fetch_no_description_line_for_empty_description() -> None:
+    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
+
+    with (
+        patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
+        patch("git_projects.cli.config.load_config", return_value=cfg),
+    ):
+        result = runner.invoke(app, ["fetch"])
+
+    # proj-b has empty description; its section should not contain a blank-description line
+    lines = result.output.splitlines()
+    proj_b_idx = next(i for i, ln in enumerate(lines) if "proj-b" in ln)
+    section = lines[proj_b_idx : proj_b_idx + 5]
+    assert not any(
+        ln.strip() == ""
+        for ln in section
+        if "proj-b" not in ln and "github.com/user/proj-b" not in ln and "ago" not in ln
+    )
 
 
 def test_fetch_by_foundry_name() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
     with (
+        patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
         patch("git_projects.cli.config.load_config", return_value=cfg),
-        patch("git_projects.cli.github.list_repos", return_value=_REMOTE_REPOS),
     ):
         result = runner.invoke(app, ["fetch", "github"])
 
@@ -170,7 +238,7 @@ def test_fetch_empty_token() -> None:
 
     with (
         patch("git_projects.cli.config.load_config", return_value=cfg),
-        patch("git_projects.cli.github.list_repos", side_effect=ValueError("token")),
+        patch("git_projects.services.github.list_repos", side_effect=ValueError("token")),
     ):
         result = runner.invoke(app, ["fetch"])
 
@@ -187,7 +255,7 @@ def test_fetch_auth_error() -> None:
     with (
         patch("git_projects.cli.config.load_config", return_value=cfg),
         patch(
-            "git_projects.cli.github.list_repos",
+            "git_projects.services.github.list_repos",
             side_effect=httpx.HTTPStatusError("401", request=request, response=response),
         ),
     ):
