@@ -4,7 +4,11 @@ from typing import Annotated
 
 import typer
 
+from git_projects import registry
+
 app = typer.Typer(no_args_is_help=True)
+config_app = typer.Typer(no_args_is_help=True)
+app.add_typer(config_app, name="config", help="Manage configuration.")
 
 
 def _version_callback(value: bool) -> None:
@@ -25,7 +29,28 @@ def main(
     """History of git projects"""
 
 
-@app.command()
-def hello(name: str = "world") -> None:
-    """Say hello."""
-    print(f"Hello, {name}!")
+@config_app.command()
+def init(
+    force: Annotated[
+        bool,
+        typer.Option("--force", "-f", help="Overwrite existing config."),
+    ] = False,
+) -> None:
+    """Create default config file."""
+    try:
+        path = registry.init_config(force=force)
+        print(path)
+    except registry.ConfigExistsError as exc:
+        print(exc)
+        raise typer.Exit(code=1) from exc
+
+
+@config_app.command()
+def show() -> None:
+    """Show config file path and contents."""
+    path = registry.get_config_path()
+    if not path.exists():
+        print("No config found. Run 'git-projects config init' first.")
+        raise typer.Exit(code=1)
+    print(path)
+    print(path.read_text(), end="")
