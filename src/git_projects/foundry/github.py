@@ -9,6 +9,7 @@ from git_projects.foundry import RemoteRepo
 
 _USER_AGENT = "git-projects/0.1"
 _TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
+_DEFAULT_URL = "https://api.github.com"
 
 
 def list_repos(config: FoundryConfig) -> list[RemoteRepo]:
@@ -21,8 +22,9 @@ def list_repos(config: FoundryConfig) -> list[RemoteRepo]:
         "Accept": "application/vnd.github+json",
         "User-Agent": _USER_AGENT,
     }
+    base_url = (config.url or _DEFAULT_URL).rstrip("/")
     url: str | None = (
-        f"{config.url}/user/repos?affiliation=owner&sort=pushed&direction=desc&per_page=100"
+        f"{base_url}/user/repos?affiliation=owner&sort=pushed&direction=desc&per_page=100"
     )
     repos: list[RemoteRepo] = []
 

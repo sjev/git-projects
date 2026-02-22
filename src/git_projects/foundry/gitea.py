@@ -15,6 +15,8 @@ def list_repos(config: FoundryConfig) -> list[RemoteRepo]:
     """Fetch all accessible repos from the Gitea API with pagination."""
     if not config.token:
         raise ValueError("Gitea token is not set.")
+    if not config.url:
+        raise ValueError("Gitea url is not set.")
 
     headers = {
         "Authorization": f"token {config.token}",
