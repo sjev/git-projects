@@ -29,7 +29,7 @@ already listed in their `config.yaml`.
   AC-02: `list_repos` follows pagination: when the response `Link` header
          contains a `rel="next"` URL, a second request is made; results from
          all pages are combined.
-  AC-03: `RemoteRepo.clone_url` is populated from `ssh_url_to_repo`.
+  AC-03: `RemoteRepo.clone_url` is populated from `http_url_to_repo`.
   AC-04: `RemoteRepo.pushed_at` is populated from `last_activity_at`
          (ISO 8601 UTC string).
   AC-05: `RemoteRepo.visibility` contains the GitLab value verbatim
@@ -96,7 +96,7 @@ def list_repos(config: FoundryConfig) -> list[RemoteRepo]: ...
   | GitLab field          | RemoteRepo field  | Notes                               |
   |-----------------------|-------------------|-------------------------------------|
   | `name`                | `name`            | direct                              |
-  | `ssh_url_to_repo`     | `clone_url`       | SSH clone URL                       |
+  | `http_url_to_repo`    | `clone_url`       | HTTPS clone URL                     |
   | `last_activity_at`    | `pushed_at`       | ISO 8601 UTC string                 |
   | `default_branch`      | `default_branch`  | direct                              |
   | `visibility`          | `visibility`      | verbatim: `"public"` / `"internal"` / `"private"` |
