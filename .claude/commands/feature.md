@@ -33,7 +33,11 @@ New or modified entities, fields, and relationships. Mermaid ER diagram if
 schema changes are involved.
 
 ## Execution flow
-Mermaid sequence diagram for the primary happy-path flow. A second diagram
+
+### Happy flow
+Describe the primary happy-path flow.
+
+### Non-happy flow
 for the most important error path.
 
 ## API / interface changes
