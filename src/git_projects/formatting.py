@@ -30,7 +30,7 @@ def relative_time(iso_timestamp: str) -> str:
 
 def format_repo(repo: RemoteRepo, max_desc: int = 60) -> str:
     """Return an indented multi-line block describing one remote repo."""
-    lines = [f"  {repo.name}", f"  {repo.clone_url}"]
+    lines = [f"{repo.name}", f"  {repo.clone_url}"]
     if repo.description:
         desc = repo.description
         if len(desc) > max_desc:

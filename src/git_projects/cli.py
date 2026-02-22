@@ -91,7 +91,10 @@ def fetch(
         raise typer.Exit(code=1) from None
 
     for name, repos in repos_by_foundry.items():
+        print(60 * "-")
         print(f"# {name} ({len(repos)} repos)")
+        print(60 * "-")
+
         for repo in repos:
             print()
             print(format_repo(repo), end="")
