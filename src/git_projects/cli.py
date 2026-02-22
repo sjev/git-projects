@@ -114,12 +114,15 @@ def fetch(
 @app.command()
 def track(
     clone_url: Annotated[str, typer.Argument(help="Clone URL of the repo to track.")],
+    path: Annotated[
+        str | None, typer.Option("--path", "-p", help="Override local clone path.")
+    ] = None,
 ) -> None:
     """Add a project to tracking."""
     cfg = _load_config_or_exit()
 
     try:
-        project = track_project(cfg, clone_url)
+        project = track_project(cfg, clone_url, path)
     except ValueError as exc:
         print(exc)
         raise typer.Exit(code=1) from None

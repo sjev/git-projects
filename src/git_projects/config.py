@@ -124,8 +124,6 @@ def save_config(config: Config) -> Path:
 def derive_project(clone_url: str, clone_root: str) -> Project:
     """Derive project name and path from a clone URL."""
     parsed = urlparse(clone_url)
-    path_parts = parsed.path.strip("/").removesuffix(".git").split("/")
-    name = path_parts[-1]
-    hostname = parsed.hostname or "unknown"
-    local_path = str(Path(clone_root) / hostname / "/".join(path_parts))
+    name = parsed.path.strip("/").removesuffix(".git").split("/")[-1]
+    local_path = str(Path(clone_root) / name)
     return Project(clone_url=clone_url, name=name, path=local_path)

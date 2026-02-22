@@ -63,7 +63,7 @@ graph LR
 | `config init` | Create default config file |
 | `config show` | Show config file path and contents |
 | `fetch [foundry]` | Fetch and print available repos from foundry APIs (not persisted) |
-| `track <clone_url>` | Add a project to config.yaml (auto-derives name and path) |
+| `track <clone_url> [--path <dir>]` | Add a project to config.yaml (auto-derives name and path; `--path` overrides) |
 | `untrack <name>` | Remove a project from config.yaml |
 | `list` | Show tracked projects |
 | `sync` | Clone missing repos, pull existing tracked repos |
@@ -130,12 +130,12 @@ untrack <name>      → stop tracking a project
   projects:
     - clone_url: https://github.com/user/repo-a.git
       name: repo-a
-      path: ~/projects/github.com/user/repo-a
+      path: ~/projects/repo-a
     - clone_url: https://gitlab.com/user/repo-b.git
       name: repo-b
-      path: ~/projects/gitlab.com/user/repo-b
+      path: ~/projects/repo-b
   ```
-- **Path derivation**: When `track` is called with a clone URL, `name` is extracted from the URL (last path segment without `.git`), and `path` is derived as `{clone_root}/{hostname}/{owner}/{repo}`.
+- **Path derivation**: When `track` is called with a clone URL, `name` is extracted from the URL (last path segment without `.git`), and `path` is derived as `{clone_root}/{name}`. Pass `--path <dir>` to override the local path entirely.
 
 ### `foundry` — API clients for repo discovery
 - **Owns**: Listing repos from GitHub, GitLab, Gitea APIs. Returns normalized repo metadata.

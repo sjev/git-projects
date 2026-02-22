@@ -60,7 +60,7 @@ def fetch_repos(
     return all_repos
 
 
-def track_project(cfg: Config, clone_url: str) -> Project:
+def track_project(cfg: Config, clone_url: str, path: str | None = None) -> Project:
     """Add a project to tracking and save config.
 
     Raises ValueError if already tracked.
@@ -68,7 +68,11 @@ def track_project(cfg: Config, clone_url: str) -> Project:
     if any(p.clone_url == clone_url for p in cfg.projects):
         raise ValueError(f"Already tracking: {clone_url}")
 
-    project = config.derive_project(clone_url, cfg.clone_root)
+    if path is not None:
+        parsed_name = clone_url.rstrip("/").removesuffix(".git").rsplit("/", 1)[-1]
+        project = Project(clone_url=clone_url, name=parsed_name, path=path)
+    else:
+        project = config.derive_project(clone_url, cfg.clone_root)
     cfg.projects.append(project)
     config.save_config(cfg)
     return project

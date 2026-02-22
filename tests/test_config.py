@@ -154,16 +154,16 @@ def test_derive_project_github() -> None:
     project = derive_project("https://github.com/user/my-repo.git", "~/projects")
     assert project.name == "my-repo"
     assert project.clone_url == "https://github.com/user/my-repo.git"
-    assert project.path == "~/projects/github.com/user/my-repo"
+    assert project.path == "~/projects/my-repo"
 
 
 def test_derive_project_gitlab() -> None:
     project = derive_project("https://gitlab.com/org/sub/repo.git", "~/projects")
     assert project.name == "repo"
-    assert project.path == "~/projects/gitlab.com/org/sub/repo"
+    assert project.path == "~/projects/repo"
 
 
 def test_derive_project_no_git_suffix() -> None:
     project = derive_project("https://github.com/user/repo", "~/projects")
     assert project.name == "repo"
-    assert project.path == "~/projects/github.com/user/repo"
+    assert project.path == "~/projects/repo"
