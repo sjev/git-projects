@@ -67,6 +67,11 @@ graph LR
 ### `registry` — Repo registry and config
 - **Owns**: Reading/writing the repo registry YAML, foundry config YAML, tracking state (which repos are tracked, their local paths, last-seen dates).
 - **Public interface**: `load_config() -> Config`, `save_config(Config)`, `init_config() -> Path`, `load_registry() -> Registry`, `save_registry(Registry)`, `get_tracked_repos() -> list[Repo]`.
+- **Data types**:
+  - `FoundryConfig`: `name`, `type`, `url`, `token`.
+  - `Config`: `clone_root`, `foundries: list[FoundryConfig]`.
+  - `Repo`: `name`, `clone_url`, `foundry`, `pushed_at`, `default_branch`, `visibility`, `description`.
+  - `Registry`: `repos: list[Repo]`.
 - **Must NOT**: Call APIs or run git commands.
 - **Storage layout**:
   ```
@@ -94,7 +99,9 @@ graph LR
 
 ### `foundry` — API clients for repo discovery
 - **Owns**: Listing repos from GitHub, GitLab, Gitea APIs. Returns normalized repo metadata.
-- **Public interface**: `list_repos(foundry_config: FoundryConfig) -> list[RemoteRepo]`.
+- **Structure**: Package with one submodule per API type (`foundry/github.py`, `foundry/gitlab.py`, `foundry/gitea.py`). Each submodule exposes the same function signature.
+- **Public interface**: Each submodule exposes `list_repos(config: FoundryConfig) -> list[RemoteRepo]`.
+- **Shared types**: `RemoteRepo` dataclass defined in `foundry/__init__.py` — fields: `name`, `clone_url`, `pushed_at`, `default_branch`, `visibility`, `description`.
 - **Must NOT**: Clone repos, modify registry, or read git history.
 - **Communication**: Called by CLI during `sync`; results passed to registry for merging.
 
