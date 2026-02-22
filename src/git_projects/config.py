@@ -12,11 +12,9 @@ clone_root: ~/projects    # where repos get cloned
 foundries:
   - name: github
     type: github
-    url: https://api.github.com
     token: ""              # paste your token here
   # - name: my-gitlab
   #   type: gitlab
-  #   url: https://gitlab.com
   #   token: ""
   # - name: my-gitea
   #   type: gitea
@@ -30,8 +28,8 @@ projects: []
 class FoundryConfig:
     name: str
     type: str
-    url: str
     token: str
+    url: str | None = None
 
 
 @dataclass
@@ -81,8 +79,8 @@ def load_config() -> Config:
         FoundryConfig(
             name=str(f["name"]),
             type=str(f["type"]),
-            url=str(f["url"]),
             token=str(f.get("token", "")),
+            url=f.get("url") or None,
         )
         for f in raw.get("foundries", [])
     ]
@@ -108,7 +106,11 @@ def save_config(config: Config) -> Path:
     data: dict[str, object] = {
         "clone_root": config.clone_root,
         "foundries": [
-            {"name": f.name, "type": f.type, "url": f.url, "token": f.token}
+            {
+                k: v
+                for k, v in {"name": f.name, "type": f.type, "token": f.token, "url": f.url}.items()
+                if v is not None
+            }
             for f in config.foundries
         ],
         "projects": [
