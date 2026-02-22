@@ -36,7 +36,7 @@ def list_repos(config: FoundryConfig) -> list[RemoteRepo]:
                 repos.append(
                     RemoteRepo(
                         name=item["name"],
-                        clone_url=item["ssh_url_to_repo"],
+                        clone_url=item["http_url_to_repo"],
                         pushed_at=item["last_activity_at"],
                         default_branch=item.get("default_branch") or "",
                         visibility=item["visibility"],
