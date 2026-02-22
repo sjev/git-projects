@@ -51,3 +51,6 @@ Rules:
 - Mermaid diagrams only (no images)
 - Be specific — version numbers, concrete patterns, not "we will use best practices"
 - Flag every assumption with [ASSUMPTION]
+
+# Input
+$ARGUMENTS

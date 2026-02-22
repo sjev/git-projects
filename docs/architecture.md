@@ -61,18 +61,35 @@ graph LR
 
 ### `cli` — Command-line interface
 - **Owns**: Argument parsing, output formatting, subcommand dispatch.
-- **Public interface**: `app` (typer instance) with subcommands `sync`, `list`, `clone`, `history`.
+- **Public interface**: `app` (typer instance) with subcommands `init`, `sync`, `list`, `clone`, `history`.
 - **Must NOT**: Contain business logic, call git directly, or manage state.
 
 ### `registry` — Repo registry and config
 - **Owns**: Reading/writing the repo registry YAML, foundry config YAML, tracking state (which repos are tracked, their local paths, last-seen dates).
-- **Public interface**: `load_config() -> Config`, `load_registry() -> Registry`, `save_registry(Registry)`, `get_tracked_repos() -> list[Repo]`.
+- **Public interface**: `load_config() -> Config`, `save_config(Config)`, `init_config() -> Path`, `load_registry() -> Registry`, `save_registry(Registry)`, `get_tracked_repos() -> list[Repo]`.
 - **Must NOT**: Call APIs or run git commands.
 - **Storage layout**:
   ```
   $XDG_DATA_HOME/git-projects/
   ├── config.yaml      # foundry URLs, tokens, clone base paths
   └── registry.yaml    # tracked repos with metadata
+  ```
+- **Default config.yaml created by `init`**:
+  ```yaml
+  clone_root: ~/projects    # where repos get cloned
+  foundries:
+    - name: github
+      type: github
+      url: https://api.github.com
+      token: ""              # paste your token here
+    # - name: my-gitlab
+    #   type: gitlab
+    #   url: https://gitlab.com
+    #   token: ""
+    # - name: my-gitea
+    #   type: gitea
+    #   url: https://gitea.example.com
+    #   token: ""
   ```
 
 ### `foundry` — API clients for repo discovery
@@ -94,9 +111,10 @@ graph LR
 ### Communication patterns
 
 All communication is **synchronous function calls**. No events, no message queues. The CLI orchestrates:
-1. `sync`: foundry → registry → gitops (pull) → registry (update dates)
-2. `list`: registry → history (format)
-3. `history`: registry → gitops (log) → history (format)
+1. `init`: registry (create default config, print path)
+2. `sync`: foundry → registry → gitops (pull) → registry (update dates)
+3. `list`: registry → history (format)
+4. `history`: registry → gitops (log) → history (format)
 
 ## Key architectural decisions
 
@@ -124,7 +142,7 @@ All communication is **synchronous function calls**. No events, no message queue
 
 - Python 3.12+, type hints everywhere (PEP 604 style).
 - Lint with `ruff check --fix`, format with `ruff format`.
-- All API tokens read from config YAML or environment variables (`GIT_PROJECTS_GITHUB_TOKEN`, etc.) — never hardcoded.
+- All API tokens read from config YAML — never hardcoded. Env var override not needed initially.
 - `git log` output parsed with `--format` flags, not regex on default output.
 - No classes where a function + dataclass will do.
 - Use `dataclasses` or plain dicts for internal data; no Pydantic [ASSUMPTION: validation complexity stays low].
@@ -133,6 +151,6 @@ All communication is **synchronous function calls**. No events, no message queue
 ## Open questions
 
 1. **Changelog quality**: Raw commit messages may be noisy. Should we group by date only, or attempt to deduplicate/summarize? Defer to implementation — start with date-grouped commit lists, improve later.
-2. **Auth flow**: How to handle token setup for each foundry? Start with config file + env vars, consider `git-projects auth add` command later.
+2. ~~**Auth flow**~~: Resolved — `init` creates config with GitHub placeholder; user edits YAML to add tokens and foundries.
 3. **Conflict resolution**: If a repo is discovered on multiple foundries (forks), how to handle? [ASSUMPTION: track as separate entries, user can remove duplicates manually.]
 4. **Clone depth**: Should `clone` use `--depth 1` or full clone? Full clone gives complete history but uses more disk. [ASSUMPTION: full clone for complete history.]
