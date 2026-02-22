@@ -200,7 +200,7 @@ All communication is **synchronous function calls**. No events, no message queue
 - `git log` output parsed with `--format` flags, not regex on default output.
 - No classes where a function + dataclass will do.
 - Use `dataclasses` or plain dicts for internal data; no Pydantic [ASSUMPTION: validation complexity stays low].
-- CLI output: plain text with minimal formatting (no rich/tables unless explicitly requested later).
+- CLI output: ANSI-colored terminal output via `typer.style()` (bold names, colored visibility badges, dimmed secondary info). No rich/tables.
 
 ## Open questions
 

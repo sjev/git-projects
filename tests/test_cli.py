@@ -147,7 +147,7 @@ def test_fetch_happy_path() -> None:
         result = runner.invoke(app, ["fetch"])
 
     assert result.exit_code == 0
-    assert "# github (2 repos)" in result.output
+    assert "GITHUB  2 repos" in result.output
     assert "proj-a" in result.output
     assert "https://github.com/user/proj-a.git" in result.output
     assert "A project" in result.output
@@ -164,7 +164,7 @@ def test_fetch_filters_old_repos_by_default() -> None:
         result = runner.invoke(app, ["fetch"])
 
     assert result.exit_code == 0
-    assert "# github (2 repos)" in result.output
+    assert "GITHUB  2 repos" in result.output
     assert "proj-old" not in result.output
 
 
@@ -178,7 +178,7 @@ def test_fetch_show_all_includes_old_repos() -> None:
         result = runner.invoke(app, ["fetch", "--show-all"])
 
     assert result.exit_code == 0
-    assert "# github (3 repos)" in result.output
+    assert "GITHUB  3 repos" in result.output
     assert "proj-old" in result.output
 
 

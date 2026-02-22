@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from git_projects.formatting import format_repo, relative_time
 from git_projects.foundry import RemoteRepo
+
+
+def _strip_ansi(s: str) -> str:
+    return re.sub(r"\x1b\[[0-9;]*m", "", s)
+
 
 # --- relative_time ---
 
@@ -48,9 +54,9 @@ _REPO = RemoteRepo(
 
 
 def test_format_repo_contains_name_and_url() -> None:
-    out = format_repo(_REPO)
-    assert "  my-app\n" in out
-    assert "  https://github.com/user/my-app.git\n" in out
+    out = _strip_ansi(format_repo(_REPO))
+    assert "my-app" in out
+    assert "https://github.com/user/my-app.git" in out
 
 
 def test_format_repo_contains_relative_time() -> None:
@@ -87,9 +93,27 @@ def test_format_repo_no_description_line_when_empty() -> None:
         visibility="public",
         description="",
     )
-    lines = [ln for ln in format_repo(repo).splitlines() if ln.strip()]
-    assert len(lines) == 3  # name, url, time — no description line
+    lines = [ln for ln in _strip_ansi(format_repo(repo)).splitlines() if ln.strip()]
+    assert len(lines) == 2  # name+vis+date, url — no description line
 
 
 def test_format_repo_ends_with_newline() -> None:
     assert format_repo(_REPO).endswith("\n")
+
+
+def test_format_repo_visibility_badge_public() -> None:
+    out = _strip_ansi(format_repo(_REPO))
+    assert "[public]" in out
+
+
+def test_format_repo_visibility_badge_private() -> None:
+    repo = RemoteRepo(
+        name="secret",
+        clone_url="https://github.com/user/secret.git",
+        pushed_at=_ts(timedelta(days=1)),
+        default_branch="main",
+        visibility="private",
+        description="",
+    )
+    out = _strip_ansi(format_repo(repo))
+    assert "[private]" in out
