@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from git_projects import config
 from git_projects.config import Config, Project
-from git_projects.foundry import RemoteRepo, github
+from git_projects.foundry import RemoteRepo, gitea, github
 
 RECENT_CUTOFF = timedelta(days=180)
 
@@ -33,15 +33,20 @@ def fetch_repos(
     for foundry_config in foundries:
         if foundry_config.type == "github":
             repos = github.list_repos(foundry_config)
+        elif foundry_config.type == "gitea":
+            repos = gitea.list_repos(foundry_config)
+        else:
+            continue
 
-            if not show_all:
-                repos = [
-                    r
-                    for r in repos
-                    if datetime.fromisoformat(r.pushed_at.replace("Z", "+00:00")) >= cutoff
-                ]
+        if not show_all:
+            repos = [
+                r
+                for r in repos
+                if datetime.fromisoformat(r.pushed_at.replace("Z", "+00:00")) >= cutoff
+            ]
 
-            result[foundry_config.name] = repos
+        repos.sort(key=lambda r: r.pushed_at, reverse=True)
+        result[foundry_config.name] = repos
 
     return result
 

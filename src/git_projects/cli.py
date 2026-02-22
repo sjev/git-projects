@@ -85,12 +85,9 @@ def fetch(
         raise typer.Exit(code=1) from None
     except httpx.HTTPStatusError as exc:
         if exc.response.status_code == 401:
-            print(
-                f"Error: GitHub API returned 401 for foundry '{foundry_name}'. "
-                "Check your token."
-            )
+            print(f"Error: API returned 401 for foundry '{foundry_name}'. Check your token.")
         else:
-            print(f"Error: GitHub API returned {exc.response.status_code}.")
+            print(f"Error: API returned {exc.response.status_code} for foundry '{foundry_name}'.")
         raise typer.Exit(code=1) from None
 
     for name, repos in repos_by_foundry.items():
