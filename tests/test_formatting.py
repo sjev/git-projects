@@ -45,7 +45,8 @@ def test_relative_time_invalid() -> None:
 
 _REPO = RemoteRepo(
     name="my-app",
-    clone_url="https://github.com/user/my-app.git",
+    repo_url="https://github.com/user/my-app",
+    clone_url="git@github.com:user/my-app.git",
     pushed_at=_ts(timedelta(days=3)),
     default_branch="main",
     visibility="public",
@@ -53,10 +54,11 @@ _REPO = RemoteRepo(
 )
 
 
-def test_format_repo_contains_name_and_url() -> None:
+def test_format_repo_contains_name_and_urls() -> None:
     out = _strip_ansi(format_repo(_REPO))
     assert "my-app" in out
-    assert "https://github.com/user/my-app.git" in out
+    assert "https://github.com/user/my-app" in out
+    assert "git@github.com:user/my-app.git" in out
 
 
 def test_format_repo_contains_relative_time() -> None:
@@ -73,7 +75,8 @@ def test_format_repo_description_truncated_at_60() -> None:
     long_desc = "x" * 65
     repo = RemoteRepo(
         name="r",
-        clone_url="u",
+        repo_url="https://host.com/r",
+        clone_url="git@host.com:r.git",
         pushed_at=_ts(timedelta(days=1)),
         default_branch="main",
         visibility="public",
@@ -87,14 +90,15 @@ def test_format_repo_description_truncated_at_60() -> None:
 def test_format_repo_no_description_line_when_empty() -> None:
     repo = RemoteRepo(
         name="r",
-        clone_url="u",
+        repo_url="https://example.com/r",
+        clone_url="git@example.com:r.git",
         pushed_at=_ts(timedelta(days=1)),
         default_branch="main",
         visibility="public",
         description="",
     )
     lines = [ln for ln in _strip_ansi(format_repo(repo)).splitlines() if ln.strip()]
-    assert len(lines) == 2  # name+vis+date, url — no description line
+    assert len(lines) == 3  # name+vis+date, repo_url, clone_url
 
 
 def test_format_repo_ends_with_newline() -> None:
@@ -109,7 +113,8 @@ def test_format_repo_visibility_badge_public() -> None:
 def test_format_repo_visibility_badge_private() -> None:
     repo = RemoteRepo(
         name="secret",
-        clone_url="https://github.com/user/secret.git",
+        repo_url="https://github.com/user/secret",
+        clone_url="git@github.com:user/secret.git",
         pushed_at=_ts(timedelta(days=1)),
         default_branch="main",
         visibility="private",

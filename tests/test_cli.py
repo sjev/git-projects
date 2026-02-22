@@ -24,7 +24,8 @@ _GH_FOUNDRY = FoundryConfig(name="github", type="github", url="https://api.githu
 _REMOTE_REPOS = [
     RemoteRepo(
         name="proj-a",
-        clone_url="https://github.com/user/proj-a.git",
+        repo_url="https://github.com/user/proj-a",
+        clone_url="git@github.com:user/proj-a.git",
         pushed_at="2026-02-20T10:00:00Z",
         default_branch="main",
         visibility="public",
@@ -32,7 +33,8 @@ _REMOTE_REPOS = [
     ),
     RemoteRepo(
         name="proj-b",
-        clone_url="https://github.com/user/proj-b.git",
+        repo_url="https://github.com/user/proj-b",
+        clone_url="git@github.com:user/proj-b.git",
         pushed_at="2025-11-01T08:00:00Z",
         default_branch="main",
         visibility="private",
@@ -42,7 +44,8 @@ _REMOTE_REPOS = [
 
 _OLD_REPO = RemoteRepo(
     name="proj-old",
-    clone_url="https://github.com/user/proj-old.git",
+    repo_url="https://github.com/user/proj-old",
+    clone_url="git@github.com:user/proj-old.git",
     pushed_at=_ts(timedelta(days=400)),
     default_branch="main",
     visibility="public",
@@ -149,7 +152,8 @@ def test_fetch_happy_path() -> None:
     assert result.exit_code == 0
     assert "Fetched 2 repos from 1 foundries" in result.output
     assert "proj-a" in result.output
-    assert "https://github.com/user/proj-a.git" in result.output
+    assert "https://github.com/user/proj-a" in result.output  # repo_url (browser URL)
+    assert "git@github.com:user/proj-a.git" in result.output  # clone_url
     assert "A project" in result.output
     assert "ago" in result.output
 
@@ -291,6 +295,22 @@ def test_track_adds_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 
     assert result.exit_code == 0
     assert "repo-a" in result.output
+    assert "https://github.com/user/repo-a.git" in result.output
+
+
+def test_track_ssh_url_shows_clone_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """AC-06: tracking an SSH URL shows the stored clone URL in output."""
+    config_path = tmp_path / "config.yaml"
+    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+
+    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+
+    with patch("git_projects.cli.config.load_config", return_value=cfg):
+        result = runner.invoke(app, ["track", "git@github.com:user/repo-a.git"])
+
+    assert result.exit_code == 0
+    assert "repo-a" in result.output
+    assert "git@github.com:user/repo-a.git" in result.output
 
 
 def test_track_duplicate_rejected() -> None:

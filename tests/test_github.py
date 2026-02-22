@@ -14,7 +14,9 @@ FOUNDRY = FoundryConfig(name="github", type="github", url="https://api.github.co
 
 _REPO_1 = {
     "name": "proj-a",
+    "html_url": "https://github.com/user/proj-a",
     "clone_url": "https://github.com/user/proj-a.git",
+    "ssh_url": "git@github.com:user/proj-a.git",
     "pushed_at": "2026-02-20T10:00:00Z",
     "default_branch": "main",
     "visibility": "public",
@@ -22,7 +24,9 @@ _REPO_1 = {
 }
 _REPO_2 = {
     "name": "proj-b",
+    "html_url": "https://github.com/user/proj-b",
     "clone_url": "https://github.com/user/proj-b.git",
+    "ssh_url": "git@github.com:user/proj-b.git",
     "pushed_at": "2025-11-01T08:00:00Z",
     "default_branch": "main",
     "visibility": "private",
@@ -75,8 +79,8 @@ def test_list_repos_empty_token_raises() -> None:
         list_repos(foundry)
 
 
-def test_list_repos_happy_path() -> None:
-    """AC-01, AC-09, AC-10: returns repos with correct fields."""
+def test_list_repos_ssh_format_default() -> None:
+    """AC-04: default (ssh) returns ssh_url as clone_url, html_url as repo_url."""
     mock_response = _make_response([_REPO_1, _REPO_2])
 
     with patch("git_projects.foundry.github.httpx.Client") as MockClient:
@@ -85,21 +89,38 @@ def test_list_repos_happy_path() -> None:
         MockClient.return_value.__exit__ = MagicMock(return_value=False)
         mock_client.get.return_value = mock_response
 
-        repos = list_repos(FOUNDRY)
+        repos = list_repos(FOUNDRY)  # default clone_url_format="ssh"
 
     assert len(repos) == 2
     assert all(isinstance(r, RemoteRepo) for r in repos)
 
     a = repos[0]
     assert a.name == "proj-a"
-    assert a.clone_url == "https://github.com/user/proj-a.git"  # AC-09
+    assert a.repo_url == "https://github.com/user/proj-a"  # AC-08
+    assert a.clone_url == "git@github.com:user/proj-a.git"  # AC-04
     assert a.pushed_at == "2026-02-20T10:00:00Z"
     assert a.default_branch == "main"
     assert a.visibility == "public"
     assert a.description == "First project"
 
     b = repos[1]
-    assert b.description == ""  # AC-10: null → ""
+    assert b.description == ""  # null → ""
+
+
+def test_list_repos_https_format() -> None:
+    """AC-05: clone_url_format='https' returns clone_url (HTTPS) as clone_url."""
+    mock_response = _make_response([_REPO_1])
+
+    with patch("git_projects.foundry.github.httpx.Client") as MockClient:
+        mock_client = MagicMock()
+        MockClient.return_value.__enter__ = MagicMock(return_value=mock_client)
+        MockClient.return_value.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_response
+
+        repos = list_repos(FOUNDRY, clone_url_format="https")
+
+    assert repos[0].repo_url == "https://github.com/user/proj-a"
+    assert repos[0].clone_url == "https://github.com/user/proj-a.git"  # AC-05
 
 
 def test_list_repos_pagination() -> None:

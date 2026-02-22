@@ -15,7 +15,8 @@ _GH_FOUNDRY = FoundryConfig(name="github", type="github", url="https://api.githu
 _REMOTE_REPOS = [
     RemoteRepo(
         name="proj-a",
-        clone_url="https://github.com/user/proj-a.git",
+        repo_url="https://github.com/user/proj-a",
+        clone_url="git@github.com:user/proj-a.git",
         pushed_at="2026-02-20T10:00:00Z",
         default_branch="main",
         visibility="public",
@@ -23,7 +24,8 @@ _REMOTE_REPOS = [
     ),
     RemoteRepo(
         name="proj-b",
-        clone_url="https://github.com/user/proj-b.git",
+        repo_url="https://github.com/user/proj-b",
+        clone_url="git@github.com:user/proj-b.git",
         pushed_at="2025-11-01T08:00:00Z",
         default_branch="main",
         visibility="private",
@@ -33,7 +35,8 @@ _REMOTE_REPOS = [
 
 _OLD_REPO = RemoteRepo(
     name="proj-old",
-    clone_url="https://github.com/user/proj-old.git",
+    repo_url="https://github.com/user/proj-old",
+    clone_url="git@github.com:user/proj-old.git",
     pushed_at="2025-01-01T00:00:00Z",
     default_branch="main",
     visibility="public",
@@ -90,6 +93,18 @@ def test_fetch_repos_by_foundry_name() -> None:
         result = fetch_repos(cfg, "github")
 
     assert len(result) == 2
+
+
+def test_fetch_repos_passes_clone_url_format() -> None:
+    """AC-04/05: fetch_repos forwards clone_url_format to list_repos."""
+    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY], clone_url_format="https")
+
+    with patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS) as mock_lr:
+        fetch_repos(cfg)
+
+    mock_lr.assert_called_once()
+    _, call_args = mock_lr.call_args[0], mock_lr.call_args
+    assert call_args[0][1] == "https"
 
 
 def test_fetch_repos_calls_on_foundry_start() -> None:

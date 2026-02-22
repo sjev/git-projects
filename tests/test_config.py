@@ -6,6 +6,7 @@ import pytest
 import yaml
 
 from git_projects.config import (
+    DEFAULT_CONFIG,
     Config,
     FoundryConfig,
     Project,
@@ -29,6 +30,7 @@ def test_load_config_happy_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         config_path,
         """\
 clone_root: ~/projects
+clone_url_format: https
 foundries:
   - name: github
     type: github
@@ -46,6 +48,7 @@ projects:
 
     assert isinstance(config, Config)
     assert config.clone_root == "~/projects"
+    assert config.clone_url_format == "https"  # AC-01
     assert len(config.foundries) == 1
     foundry = config.foundries[0]
     assert isinstance(foundry, FoundryConfig)
@@ -54,6 +57,19 @@ projects:
     assert len(config.projects) == 1
     assert config.projects[0].name == "repo-a"
     assert config.projects[0].clone_url == "https://github.com/user/repo-a.git"
+
+
+def test_load_config_clone_url_format_defaults_to_ssh(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC-01: clone_url_format absent → defaults to 'ssh'."""
+    config_path = tmp_path / "config.yaml"
+    _write_config(config_path, "clone_root: ~/projects\nfoundries: []\n")
+    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+
+    config = load_config()
+
+    assert config.clone_url_format == "ssh"
 
 
 def test_load_config_empty_projects(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -144,7 +160,13 @@ def test_save_config_writes_yaml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
     data = yaml.safe_load(config_path.read_text())
     assert data["clone_root"] == "~/x"
+    assert data["clone_url_format"] == "ssh"
     assert data["projects"] == []
+
+
+def test_default_config_contains_clone_url_format() -> None:
+    """AC-02: DEFAULT_CONFIG template includes clone_url_format: ssh."""
+    assert "clone_url_format: ssh" in DEFAULT_CONFIG
 
 
 # --- derive_project ---
@@ -165,5 +187,20 @@ def test_derive_project_gitlab() -> None:
 
 def test_derive_project_no_git_suffix() -> None:
     project = derive_project("https://github.com/user/repo", "~/projects")
+    assert project.name == "repo"
+    assert project.path == "~/projects/repo"
+
+
+def test_derive_project_ssh_scp_style() -> None:
+    """AC-06: SCP-style SSH URL correctly extracts name and path."""
+    project = derive_project("git@github.com:user/my-repo.git", "~/projects")
+    assert project.name == "my-repo"
+    assert project.clone_url == "git@github.com:user/my-repo.git"
+    assert project.path == "~/projects/my-repo"
+
+
+def test_derive_project_ssh_nested_path() -> None:
+    """AC-06: SSH URL with org/repo extracts last segment as name."""
+    project = derive_project("git@gitea.host:org/sub/repo.git", "~/projects")
     assert project.name == "repo"
     assert project.path == "~/projects/repo"
