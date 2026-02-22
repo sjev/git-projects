@@ -93,7 +93,7 @@ untrack <name>      → stop tracking a project
 - **Data types**:
   - `FoundryConfig`: `name`, `type`, `url`, `token`.
   - `Project`: `clone_url`, `name`, `path`.
-  - `Config`: `clone_root`, `foundries: list[FoundryConfig]`, `projects: list[Project]`.
+  - `Config`: `clone_root`, `foundries: list[FoundryConfig]`, `projects: list[Project]`, `clone_url_format: str` (`"ssh"` | `"https"`, default `"ssh"`).
 - **Must NOT**: Call APIs or run git commands.
 - **Storage layout**:
   ```
@@ -103,14 +103,13 @@ untrack <name>      → stop tracking a project
 - **Default config.yaml created by `init`**:
   ```yaml
   clone_root: ~/projects    # where repos get cloned
+  clone_url_format: ssh     # "https" or "ssh"
   foundries:
     - name: github
       type: github
-      url: https://api.github.com
       token: ""              # paste your token here
     # - name: my-gitlab
     #   type: gitlab
-    #   url: https://gitlab.com
     #   token: ""
     # - name: my-gitea
     #   type: gitea
@@ -135,13 +134,13 @@ untrack <name>      → stop tracking a project
       name: repo-b
       path: ~/projects/repo-b
   ```
-- **Path derivation**: When `track` is called with a clone URL, `name` is extracted from the URL (last path segment without `.git`), and `path` is derived as `{clone_root}/{name}`. Pass `--path <dir>` to override the local path entirely.
+- **Path derivation**: When `track` is called with a clone URL, `name` is extracted from the URL (last path segment without `.git`), and `path` is derived as `{clone_root}/{name}`. Both HTTPS (`https://host/user/repo.git`) and SCP-style SSH (`git@host:user/repo.git`) URLs are supported. Pass `--path <dir>` to override the local path entirely.
 
 ### `foundry` — API clients for repo discovery
 - **Owns**: Listing repos from GitHub, GitLab, Gitea APIs. Returns normalized repo metadata.
 - **Structure**: Package with one submodule per API type (`foundry/github.py`, `foundry/gitlab.py`, `foundry/gitea.py`). Each submodule exposes the same function signature.
-- **Public interface**: Each submodule exposes `list_repos(config: FoundryConfig) -> list[RemoteRepo]`.
-- **Shared types**: `RemoteRepo` dataclass defined in `foundry/__init__.py` — fields: `name`, `clone_url`, `pushed_at`, `default_branch`, `visibility`, `description`.
+- **Public interface**: Each submodule exposes `list_repos(config: FoundryConfig, clone_url_format: str = "ssh") -> list[RemoteRepo]`.
+- **Shared types**: `RemoteRepo` dataclass defined in `foundry/__init__.py` — fields: `name`, `repo_url` (browser URL, always HTTPS), `clone_url` (HTTPS or SSH per `clone_url_format`), `pushed_at`, `default_branch`, `visibility`, `description`.
 - **Must NOT**: Clone repos, modify config, or read git history.
 
 ### `gitops` — Local git operations
