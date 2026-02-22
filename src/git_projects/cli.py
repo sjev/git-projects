@@ -6,7 +6,7 @@ import httpx
 import typer
 
 from git_projects import config
-from git_projects.formatting import format_repo
+from git_projects.formatting import format_header, format_repo
 from git_projects.services import fetch_repos, track_project, untrack_project
 
 app = typer.Typer(no_args_is_help=True)
@@ -91,9 +91,7 @@ def fetch(
         raise typer.Exit(code=1) from None
 
     for name, repos in repos_by_foundry.items():
-        print(60 * "-")
-        print(f"# {name} ({len(repos)} repos)")
-        print(60 * "-")
+        print(format_header(name, len(repos)))
 
         for repo in repos:
             print()
