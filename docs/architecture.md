@@ -61,7 +61,7 @@ graph LR
 
 ### `cli` — Command-line interface
 - **Owns**: Argument parsing, output formatting, subcommand dispatch.
-- **Public interface**: `app` (typer instance) with subcommands `init`, `sync`, `list`, `clone`, `history`.
+- **Public interface**: `app` (typer instance) with subcommands `config` (group: `init`, `show`), `sync`, `list`, `clone`, `history`.
 - **Must NOT**: Contain business logic, call git directly, or manage state.
 
 ### `registry` — Repo registry and config
@@ -111,7 +111,8 @@ graph LR
 ### Communication patterns
 
 All communication is **synchronous function calls**. No events, no message queues. The CLI orchestrates:
-1. `init`: registry (create default config, print path)
+1. `config init`: registry (create default config, print path)
+1. `config show`: registry (load config, print path + content)
 2. `sync`: foundry → registry → gitops (pull) → registry (update dates)
 3. `list`: registry → history (format)
 4. `history`: registry → gitops (log) → history (format)
