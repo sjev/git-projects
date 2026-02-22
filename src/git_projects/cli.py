@@ -8,7 +8,7 @@ import typer
 
 from git_projects import config
 from git_projects.formatting import format_repo
-from git_projects.services import fetch_repos, track_project, untrack_project
+from git_projects.services import fetch_repos, sync_projects, track_project, untrack_project
 
 app = typer.Typer(no_args_is_help=True)
 config_app = typer.Typer(no_args_is_help=True)
@@ -168,6 +168,22 @@ def sync() -> None:
         print("No projects tracked. Use 'git-projects track <clone_url>' to add one.")
         return
 
-    for project in cfg.projects:
-        print(f"Sync: {project.name} → {project.path}")
-        # TODO: clone if missing, pull if exists (requires gitops module)
+    _STATUS_COLOR = {
+        "cloned": "cyan",
+        "synced": "green",
+        "skipped (dirty)": "yellow",
+    }
+
+    def _on_project(name: str, status: str) -> None:
+        color = _STATUS_COLOR.get(status, "red")
+        label = typer.style(status, fg=color)
+        print(f"  {name}  {label}")
+
+    result = sync_projects(cfg.projects, on_project=_on_project)
+
+    summary = (
+        f"{len(result.cloned) + len(result.synced)} synced, "
+        f"{len(result.skipped)} skipped, "
+        f"{len(result.errored)} errors"
+    )
+    print(f"\n{typer.style(summary, bold=True)}")

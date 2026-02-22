@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from git_projects import config
 from git_projects.config import Config, Project
 from git_projects.foundry import RemoteRepo, gitea, github, gitlab
+from git_projects.gitops import GitError, clone_repo, is_dirty, pull_repo, push_repo
 
 RECENT_CUTOFF = timedelta(days=180)
 
@@ -89,3 +92,57 @@ def untrack_project(cfg: Config, name: str) -> None:
         raise ValueError(f"No project named '{name}' found.")
 
     config.save_config(cfg)
+
+
+@dataclass
+class SyncResult:
+    cloned: list[str] = field(default_factory=list)
+    synced: list[str] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)
+    errored: list[tuple[str, str]] = field(default_factory=list)
+
+
+def sync_projects(
+    projects: list[Project],
+    on_project: Callable[[str, str], None] | None = None,
+) -> SyncResult:
+    """Clone missing repos and pull+push existing ones.
+
+    Calls on_project(name, status_message) for each project as it is processed.
+    Dirty repos are skipped; git errors are recorded and processing continues.
+    """
+    result = SyncResult()
+
+    for project in projects:
+        expanded = str(Path(project.path).expanduser())
+
+        if not Path(expanded).exists():
+            try:
+                clone_repo(project.clone_url, project.path)
+                result.cloned.append(project.name)
+                if on_project:
+                    on_project(project.name, "cloned")
+            except GitError as exc:
+                result.errored.append((project.name, str(exc)))
+                if on_project:
+                    on_project(project.name, f"error: {exc}")
+            continue
+
+        if is_dirty(project.path):
+            result.skipped.append(project.name)
+            if on_project:
+                on_project(project.name, "skipped (dirty)")
+            continue
+
+        try:
+            pull_repo(project.path)
+            push_repo(project.path)
+            result.synced.append(project.name)
+            if on_project:
+                on_project(project.name, "synced")
+        except GitError as exc:
+            result.errored.append((project.name, str(exc)))
+            if on_project:
+                on_project(project.name, f"error: {exc}")
+
+    return result

@@ -381,3 +381,78 @@ def test_list_empty() -> None:
 
     assert result.exit_code == 0
     assert "No projects tracked" in result.output
+
+
+# --- sync command ---
+
+from git_projects.services import SyncResult  # noqa: E402
+
+
+def _sync_cfg() -> Config:
+    return Config(
+        clone_root="~/projects",
+        foundries=[],
+        projects=[
+            Project(clone_url="https://github.com/u/a.git", name="a", path="~/projects/a"),
+            Project(clone_url="https://github.com/u/b.git", name="b", path="~/projects/b"),
+        ],
+    )
+
+
+def test_sync_no_projects() -> None:
+    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+
+    with patch("git_projects.cli.config.load_config", return_value=cfg):
+        result = runner.invoke(app, ["sync"])
+
+    assert result.exit_code == 0
+    assert "No projects tracked" in result.output
+
+
+def test_sync_calls_sync_projects_with_projects() -> None:
+    sync_result = SyncResult(cloned=[], synced=["a", "b"], skipped=[], errored=[])
+
+    with (
+        patch("git_projects.cli.config.load_config", return_value=_sync_cfg()),
+        patch("git_projects.cli.sync_projects", return_value=sync_result) as mock_sync,
+    ):
+        result = runner.invoke(app, ["sync"])
+
+    assert result.exit_code == 0
+    mock_sync.assert_called_once()
+    _, kwargs = mock_sync.call_args
+    assert kwargs.get("on_project") is not None or mock_sync.call_args[0]
+
+
+def test_sync_prints_summary_line() -> None:
+    sync_result = SyncResult(cloned=["a"], synced=["b"], skipped=["c"], errored=[("d", "fail")])
+
+    with (
+        patch("git_projects.cli.config.load_config", return_value=_sync_cfg()),
+        patch("git_projects.cli.sync_projects", return_value=sync_result),
+    ):
+        result = runner.invoke(app, ["sync"])
+
+    assert result.exit_code == 0
+    assert "2 synced" in result.output
+    assert "1 skipped" in result.output
+    assert "1 errors" in result.output
+
+
+def test_sync_on_project_callback_is_called() -> None:
+    """on_project callback produces colored output for each project status."""
+
+    def fake_sync(projects, on_project=None):
+        if on_project:
+            on_project("a", "synced")
+            on_project("b", "skipped (dirty)")
+        return SyncResult(synced=["a"], skipped=["b"])
+
+    with (
+        patch("git_projects.cli.config.load_config", return_value=_sync_cfg()),
+        patch("git_projects.cli.sync_projects", side_effect=fake_sync),
+    ):
+        result = runner.invoke(app, ["sync"])
+
+    assert "synced" in result.output
+    assert "skipped" in result.output

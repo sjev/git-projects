@@ -7,7 +7,8 @@ import pytest
 
 from git_projects.config import Config, FoundryConfig, Project
 from git_projects.foundry import RemoteRepo
-from git_projects.services import fetch_repos, track_project, untrack_project
+from git_projects.gitops import GitError
+from git_projects.services import fetch_repos, sync_projects, track_project, untrack_project
 
 _GH_FOUNDRY = FoundryConfig(name="github", type="github", url="https://api.github.com", token="tok")
 
@@ -177,3 +178,139 @@ def test_untrack_project_not_found() -> None:
 
     with pytest.raises(ValueError, match="nonexistent"):
         untrack_project(cfg, "nonexistent")
+
+
+# --- sync_projects ---
+
+_PROJECTS = [
+    Project(clone_url="https://github.com/u/a.git", name="a", path="/repos/a"),
+    Project(clone_url="https://github.com/u/b.git", name="b", path="/repos/b"),
+]
+
+
+def test_sync_clones_missing_repo() -> None:
+    with (
+        patch("git_projects.services.Path") as mock_path,
+        patch("git_projects.services.clone_repo") as mock_clone,
+        patch("git_projects.services.is_dirty"),
+        patch("git_projects.services.pull_repo"),
+        patch("git_projects.services.push_repo"),
+    ):
+        mock_path.return_value.expanduser.return_value = mock_path.return_value
+        mock_path.return_value.__str__ = lambda self: "/repos/a"
+        mock_path.return_value.exists.return_value = False
+
+        result = sync_projects([_PROJECTS[0]])
+
+    assert result.cloned == ["a"]
+    assert result.synced == []
+    mock_clone.assert_called_once()
+
+
+def test_sync_pulls_and_pushes_clean_repo(tmp_path: Path) -> None:
+    repo = tmp_path / "a"
+    repo.mkdir()
+    project = Project(clone_url="https://github.com/u/a.git", name="a", path=str(repo))
+
+    with (
+        patch("git_projects.services.is_dirty", return_value=False),
+        patch("git_projects.services.pull_repo") as mock_pull,
+        patch("git_projects.services.push_repo") as mock_push,
+    ):
+        result = sync_projects([project])
+
+    assert result.synced == ["a"]
+    assert result.cloned == []
+    mock_pull.assert_called_once_with(str(repo))
+    mock_push.assert_called_once_with(str(repo))
+
+
+def test_sync_skips_dirty_repo(tmp_path: Path) -> None:
+    repo = tmp_path / "a"
+    repo.mkdir()
+    project = Project(clone_url="https://github.com/u/a.git", name="a", path=str(repo))
+
+    with (
+        patch("git_projects.services.is_dirty", return_value=True),
+        patch("git_projects.services.pull_repo") as mock_pull,
+    ):
+        result = sync_projects([project])
+
+    assert result.skipped == ["a"]
+    mock_pull.assert_not_called()
+
+
+def test_sync_records_clone_error() -> None:
+    with (
+        patch("git_projects.services.Path") as mock_path,
+        patch("git_projects.services.clone_repo", side_effect=GitError("auth failed")),
+    ):
+        mock_path.return_value.expanduser.return_value = mock_path.return_value
+        mock_path.return_value.__str__ = lambda self: "/repos/a"
+        mock_path.return_value.exists.return_value = False
+
+        result = sync_projects([_PROJECTS[0]])
+
+    assert result.errored == [("a", "auth failed")]
+    assert result.cloned == []
+
+
+def test_sync_records_pull_error_and_skips_push(tmp_path: Path) -> None:
+    repo = tmp_path / "a"
+    repo.mkdir()
+    project = Project(clone_url="https://github.com/u/a.git", name="a", path=str(repo))
+
+    with (
+        patch("git_projects.services.is_dirty", return_value=False),
+        patch("git_projects.services.pull_repo", side_effect=GitError("conflict")),
+        patch("git_projects.services.push_repo") as mock_push,
+    ):
+        result = sync_projects([project])
+
+    assert result.errored == [("a", "conflict")]
+    mock_push.assert_not_called()
+
+
+def test_sync_continues_after_error(tmp_path: Path) -> None:
+    repo_a = tmp_path / "a"
+    repo_b = tmp_path / "b"
+    repo_b.mkdir()
+    projects = [
+        Project(clone_url="https://github.com/u/a.git", name="a", path=str(repo_a)),
+        Project(clone_url="https://github.com/u/b.git", name="b", path=str(repo_b)),
+    ]
+
+    with (
+        patch("git_projects.services.clone_repo", side_effect=GitError("fail")),
+        patch("git_projects.services.is_dirty", return_value=False),
+        patch("git_projects.services.pull_repo"),
+        patch("git_projects.services.push_repo"),
+    ):
+        result = sync_projects(projects)
+
+    assert result.errored[0][0] == "a"
+    assert result.synced == ["b"]
+
+
+def test_sync_empty_projects() -> None:
+    result = sync_projects([])
+    assert result.cloned == []
+    assert result.synced == []
+    assert result.skipped == []
+    assert result.errored == []
+
+
+def test_sync_calls_on_project_callback(tmp_path: Path) -> None:
+    repo = tmp_path / "a"
+    repo.mkdir()
+    project = Project(clone_url="https://github.com/u/a.git", name="a", path=str(repo))
+    calls: list[tuple[str, str]] = []
+
+    with (
+        patch("git_projects.services.is_dirty", return_value=False),
+        patch("git_projects.services.pull_repo"),
+        patch("git_projects.services.push_repo"),
+    ):
+        sync_projects([project], on_project=lambda n, s: calls.append((n, s)))
+
+    assert calls == [("a", "synced")]
