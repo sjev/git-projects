@@ -4,8 +4,8 @@ import re
 
 import httpx
 
+from git_projects.config import FoundryConfig
 from git_projects.foundry import RemoteRepo
-from git_projects.registry import FoundryConfig
 
 _USER_AGENT = "git-projects/0.1"
 _TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)

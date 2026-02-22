@@ -6,9 +6,9 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
+from git_projects.config import FoundryConfig
 from git_projects.foundry import RemoteRepo
 from git_projects.foundry.github import _next_url, list_repos
-from git_projects.registry import FoundryConfig
 
 FOUNDRY = FoundryConfig(name="github", type="github", url="https://api.github.com", token="tok")
 

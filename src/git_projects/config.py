@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 from platformdirs import user_data_path
@@ -21,6 +22,7 @@ foundries:
   #   type: gitea
   #   url: https://gitea.example.com
   #   token: ""
+projects: []
 """
 
 
@@ -33,25 +35,17 @@ class FoundryConfig:
 
 
 @dataclass
+class Project:
+    clone_url: str
+    name: str
+    path: str
+
+
+@dataclass
 class Config:
     clone_root: str
     foundries: list[FoundryConfig]
-
-
-@dataclass
-class Repo:
-    name: str
-    clone_url: str
-    foundry: str
-    pushed_at: str
-    default_branch: str
-    visibility: str
-    description: str
-
-
-@dataclass
-class Registry:
-    repos: list[Repo]
+    projects: list[Project] = field(default_factory=list)
 
 
 class ConfigExistsError(Exception):
@@ -65,11 +59,6 @@ class ConfigExistsError(Exception):
 def get_config_path() -> Path:
     """Return the absolute path to config.yaml (may not exist yet)."""
     return user_data_path("git-projects") / "config.yaml"
-
-
-def get_registry_path() -> Path:
-    """Return the absolute path to registry.yaml (may not exist yet)."""
-    return user_data_path("git-projects") / "registry.yaml"
 
 
 def init_config(*, force: bool = False) -> Path:
@@ -97,27 +86,44 @@ def load_config() -> Config:
         )
         for f in raw.get("foundries", [])
     ]
-    return Config(clone_root=str(raw.get("clone_root", "")), foundries=foundries)
+    projects = [
+        Project(
+            clone_url=str(p["clone_url"]),
+            name=str(p["name"]),
+            path=str(p["path"]),
+        )
+        for p in raw.get("projects", []) or []
+    ]
+    return Config(
+        clone_root=str(raw.get("clone_root", "")),
+        foundries=foundries,
+        projects=projects,
+    )
 
 
-def save_registry(registry: Registry) -> Path:
-    """Write registry to registry.yaml sorted by pushed_at descending and return its path."""
-    registry_path = get_registry_path()
-    registry_path.parent.mkdir(parents=True, exist_ok=True)
-    sorted_repos = sorted(registry.repos, key=lambda r: r.pushed_at, reverse=True)
-    data = {
-        "repos": [
-            {
-                "name": repo.name,
-                "clone_url": repo.clone_url,
-                "foundry": repo.foundry,
-                "pushed_at": repo.pushed_at,
-                "default_branch": repo.default_branch,
-                "visibility": repo.visibility,
-                "description": repo.description,
-            }
-            for repo in sorted_repos
-        ]
+def save_config(config: Config) -> Path:
+    """Write config to config.yaml and return its path."""
+    config_path = get_config_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    data: dict[str, object] = {
+        "clone_root": config.clone_root,
+        "foundries": [
+            {"name": f.name, "type": f.type, "url": f.url, "token": f.token}
+            for f in config.foundries
+        ],
+        "projects": [
+            {"clone_url": p.clone_url, "name": p.name, "path": p.path} for p in config.projects
+        ],
     }
-    registry_path.write_text(yaml.dump(data, default_flow_style=False, allow_unicode=True))
-    return registry_path
+    config_path.write_text(yaml.dump(data, default_flow_style=False, allow_unicode=True))
+    return config_path
+
+
+def derive_project(clone_url: str, clone_root: str) -> Project:
+    """Derive project name and path from a clone URL."""
+    parsed = urlparse(clone_url)
+    path_parts = parsed.path.strip("/").removesuffix(".git").split("/")
+    name = path_parts[-1]
+    hostname = parsed.hostname or "unknown"
+    local_path = str(Path(clone_root) / hostname / "/".join(path_parts))
+    return Project(clone_url=clone_url, name=name, path=local_path)
