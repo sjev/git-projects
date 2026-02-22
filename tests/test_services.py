@@ -49,8 +49,17 @@ def test_fetch_repos_returns_repos() -> None:
     with patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS):
         result = fetch_repos(cfg)
 
-    assert "github" in result
-    assert len(result["github"]) == 2
+    assert len(result) == 2
+
+
+def test_fetch_repos_sorted_ascending() -> None:
+    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
+
+    with patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS):
+        result = fetch_repos(cfg)
+
+    assert result[0].name == "proj-b"  # older
+    assert result[1].name == "proj-a"  # newer
 
 
 def test_fetch_repos_filters_old_by_default() -> None:
@@ -59,7 +68,7 @@ def test_fetch_repos_filters_old_by_default() -> None:
     with patch("git_projects.services.github.list_repos", return_value=[*_REMOTE_REPOS, _OLD_REPO]):
         result = fetch_repos(cfg)
 
-    names = [r.name for r in result["github"]]
+    names = [r.name for r in result]
     assert "proj-old" not in names
 
 
@@ -69,7 +78,7 @@ def test_fetch_repos_show_all_includes_old() -> None:
     with patch("git_projects.services.github.list_repos", return_value=[*_REMOTE_REPOS, _OLD_REPO]):
         result = fetch_repos(cfg, show_all=True)
 
-    names = [r.name for r in result["github"]]
+    names = [r.name for r in result]
     assert "proj-old" in names
 
 
@@ -79,7 +88,17 @@ def test_fetch_repos_by_foundry_name() -> None:
     with patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS):
         result = fetch_repos(cfg, "github")
 
-    assert "github" in result
+    assert len(result) == 2
+
+
+def test_fetch_repos_calls_on_foundry_start() -> None:
+    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
+    called_with: list[str] = []
+
+    with patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS):
+        fetch_repos(cfg, on_foundry_start=called_with.append)
+
+    assert called_with == ["github"]
 
 
 def test_fetch_repos_unknown_foundry() -> None:

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import sys
 from typing import Annotated
 
 import httpx
 import typer
 
 from git_projects import config
-from git_projects.formatting import format_header, format_repo
+from git_projects.formatting import format_repo
 from git_projects.services import fetch_repos, track_project, untrack_project
 
 app = typer.Typer(no_args_is_help=True)
@@ -78,24 +79,36 @@ def fetch(
     """Fetch and print available repos from foundry APIs."""
     cfg = _load_config_or_exit()
 
+    foundry_count = 0
+
+    def _on_foundry_start(name: str) -> None:
+        nonlocal foundry_count
+        foundry_count += 1
+        sys.stdout.write(f"\rFetching {name}...")
+        sys.stdout.flush()
+
     try:
-        repos_by_foundry = fetch_repos(cfg, foundry_name, show_all=show_all)
+        repos = fetch_repos(
+            cfg, foundry_name, show_all=show_all, on_foundry_start=_on_foundry_start
+        )
     except ValueError as exc:
+        sys.stdout.write("\r\033[K")
         print(exc)
         raise typer.Exit(code=1) from None
     except httpx.HTTPStatusError as exc:
+        sys.stdout.write("\r\033[K")
         if exc.response.status_code == 401:
             print(f"Error: API returned 401 for foundry '{foundry_name}'. Check your token.")
         else:
             print(f"Error: API returned {exc.response.status_code} for foundry '{foundry_name}'.")
         raise typer.Exit(code=1) from None
 
-    for name, repos in repos_by_foundry.items():
-        print(format_header(name, len(repos)))
+    summary = typer.style(f"Fetched {len(repos)} repos from {foundry_count} foundries", bold=True)
+    print(f"\r\033[K\n{summary}\n{'─' * 60}")
 
-        for repo in repos:
-            print()
-            print(format_repo(repo), end="")
+    for repo in repos:
+        print()
+        print(format_repo(repo), end="")
 
 
 @app.command()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 
 from git_projects import config
@@ -14,10 +15,11 @@ def fetch_repos(
     foundry_name: str | None = None,
     *,
     show_all: bool = False,
-) -> dict[str, list[RemoteRepo]]:
+    on_foundry_start: Callable[[str], None] | None = None,
+) -> list[RemoteRepo]:
     """Fetch repos from configured foundries.
 
-    Returns a mapping of foundry name to list of repos.
+    Returns a flat list of repos sorted by pushed_at ascending (oldest first).
     Raises ValueError if foundry_name is given but not found.
     Lets httpx.HTTPStatusError and ValueError (missing token) propagate.
     """
@@ -28,17 +30,22 @@ def fetch_repos(
             raise ValueError(f"No foundry named '{foundry_name}' in config.")
 
     cutoff = datetime.now(timezone.utc) - RECENT_CUTOFF
-    result: dict[str, list[RemoteRepo]] = {}
+    all_repos: list[RemoteRepo] = []
 
     for foundry_config in foundries:
         if foundry_config.type == "github":
-            repos = github.list_repos(foundry_config)
+            list_repos = github.list_repos
         elif foundry_config.type == "gitea":
-            repos = gitea.list_repos(foundry_config)
+            list_repos = gitea.list_repos
         elif foundry_config.type == "gitlab":
-            repos = gitlab.list_repos(foundry_config)
+            list_repos = gitlab.list_repos
         else:
             continue
+
+        if on_foundry_start:
+            on_foundry_start(foundry_config.name)
+
+        repos = list_repos(foundry_config)
 
         if not show_all:
             repos = [
@@ -47,10 +54,10 @@ def fetch_repos(
                 if datetime.fromisoformat(r.pushed_at.replace("Z", "+00:00")) >= cutoff
             ]
 
-        repos.sort(key=lambda r: r.pushed_at, reverse=True)
-        result[foundry_config.name] = repos
+        all_repos.extend(repos)
 
-    return result
+    all_repos.sort(key=lambda r: r.pushed_at)
+    return all_repos
 
 
 def track_project(cfg: Config, clone_url: str) -> Project:

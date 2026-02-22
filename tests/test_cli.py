@@ -147,11 +147,25 @@ def test_fetch_happy_path() -> None:
         result = runner.invoke(app, ["fetch"])
 
     assert result.exit_code == 0
-    assert "GITHUB  2 repos" in result.output
+    assert "Fetched 2 repos from 1 foundries" in result.output
     assert "proj-a" in result.output
     assert "https://github.com/user/proj-a.git" in result.output
     assert "A project" in result.output
     assert "ago" in result.output
+
+
+def test_fetch_most_recent_last() -> None:
+    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
+
+    with (
+        patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
+        patch("git_projects.cli.config.load_config", return_value=cfg),
+    ):
+        result = runner.invoke(app, ["fetch"])
+
+    assert result.exit_code == 0
+    # proj-b (2025-11) should appear before proj-a (2026-02) — oldest first
+    assert result.output.index("proj-b") < result.output.index("proj-a")
 
 
 def test_fetch_filters_old_repos_by_default() -> None:
@@ -164,7 +178,7 @@ def test_fetch_filters_old_repos_by_default() -> None:
         result = runner.invoke(app, ["fetch"])
 
     assert result.exit_code == 0
-    assert "GITHUB  2 repos" in result.output
+    assert "Fetched 2 repos from 1 foundries" in result.output
     assert "proj-old" not in result.output
 
 
@@ -178,7 +192,7 @@ def test_fetch_show_all_includes_old_repos() -> None:
         result = runner.invoke(app, ["fetch", "--show-all"])
 
     assert result.exit_code == 0
-    assert "GITHUB  3 repos" in result.output
+    assert "Fetched 3 repos from 1 foundries" in result.output
     assert "proj-old" in result.output
 
 
@@ -191,15 +205,13 @@ def test_fetch_no_description_line_for_empty_description() -> None:
     ):
         result = runner.invoke(app, ["fetch"])
 
-    # proj-b has empty description; its section should not contain a blank-description line
+    # proj-b has empty description — should only have name line + url line (2 lines)
     lines = result.output.splitlines()
     proj_b_idx = next(i for i, ln in enumerate(lines) if "proj-b" in ln)
-    section = lines[proj_b_idx : proj_b_idx + 5]
-    assert not any(
-        ln.strip() == ""
-        for ln in section
-        if "proj-b" not in ln and "github.com/user/proj-b" not in ln and "ago" not in ln
-    )
+    assert "github.com/user/proj-b" in lines[proj_b_idx + 1]
+    # Next non-blank line should NOT be a description — it should be the next repo or end
+    next_content = lines[proj_b_idx + 2].strip() if proj_b_idx + 2 < len(lines) else ""
+    assert next_content == "" or "proj-" in next_content
 
 
 def test_fetch_by_foundry_name() -> None:
