@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from git_projects import config
 from git_projects.config import Config, Project
-from git_projects.foundry import RemoteRepo, gitea, github
+from git_projects.foundry import RemoteRepo, gitea, github, gitlab
 
 RECENT_CUTOFF = timedelta(days=180)
 
@@ -35,6 +35,8 @@ def fetch_repos(
             repos = github.list_repos(foundry_config)
         elif foundry_config.type == "gitea":
             repos = gitea.list_repos(foundry_config)
+        elif foundry_config.type == "gitlab":
+            repos = gitlab.list_repos(foundry_config)
         else:
             continue
 
