@@ -1,5 +1,5 @@
 [project]
-name = "git-projects"
+name = "git-proj"
 version = "0.1.0"
 description = "Discover, track, and sync Git repos across GitHub, GitLab, and Gitea"
 readme = "README.md"
@@ -7,7 +7,19 @@ license = {text = "MIT"}
 authors = [
     { name = "Jev Kuznetsov", email = "jev.kuznetsov@gmail.com" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.11"
+keywords = ["git", "github", "gitlab", "gitea", "sync", "cli", "workspace-manager", "multi-repo", "developer-tools", "git-automation", "forge-discovery"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Version Control :: Git",
+]
 dependencies = [
     "httpx>=0.28.1",
     "platformdirs>=4.0",
@@ -15,8 +27,15 @@ dependencies = [
     "typer>=0.12",
 ]
 
+[project.urls]
+Homepage = "https://github.com/sjev/git-projects"
+Repository = "https://github.com/sjev/git-projects"
+
 [project.scripts]
-git-projects = "git_projects.cli:app"
+gpr = "git_projects.cli:app"
+
+[tool.uv.build-backend]
+module-name = "git_projects"
 
 [build-system]
 requires = ["uv_build>=0.8.8,<0.9.0"]
@@ -33,7 +52,7 @@ dev = [
 ]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.11"
 strict = true
 files = ["src"]
 
@@ -41,7 +60,7 @@ files = ["src"]
 testpaths = ["tests"]
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
