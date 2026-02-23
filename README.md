@@ -6,7 +6,8 @@ Local-first. Config-driven. No daemon.
 
 ## Why
 
-If you work across multiple Git foundries — GitHub, a company GitLab, a self-hosted Gitea — you lose track of what lives where.
+If you juggle between different projects and work across multiple Git foundries — GitHub, a company GitLab, a self-hosted Gitea — you may lose track of what lives where and what you've been working on recently.
+
 `git-proj` gives you one place to discover repos via APIs, pick which ones to track, and keep them synced locally.
 
 ## Install
