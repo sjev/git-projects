@@ -1,8 +1,9 @@
 [project]
 name = "git-projects"
 version = "0.1.0"
-description = "History of git projects"
+description = "Discover, track, and sync Git repos across GitHub, GitLab, and Gitea"
 readme = "README.md"
+license = {text = "MIT"}
 authors = [
     { name = "Jev Kuznetsov", email = "jev.kuznetsov@gmail.com" }
 ]

@@ -36,7 +36,7 @@ def main(
         typer.Option("--version", "-v", help="Show version and exit.", callback=_version_callback),
     ] = False,
 ) -> None:
-    """History of git projects"""
+    """Discover, track, and sync git repos across foundries."""
 
 
 @config_app.command()
