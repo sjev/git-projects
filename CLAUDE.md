@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**git-projects** is a CLI tool that provides a unified history view across multiple Git foundries (GitHub, GitLab, Gitea). Local-first, config-driven, no daemon.
+**git-projects** is a CLI tool that discovers, tracks, and syncs Git repositories across multiple foundries (GitHub, GitLab, Gitea). Local-first, config-driven, no daemon.
 
 ## Commands
 
@@ -25,13 +25,17 @@ uv run pytest tests/test_cli.py::test_fetch_github -v
 ```
 CLI (typer) → Config (YAML) → Services (orchestration)
                                     ↓
-                           Foundry Clients (GitHub, Gitea)
+                           Foundry Clients (GitHub, GitLab, Gitea)
+                                    ↓
+                           Index (JSON cache) ← → GitOps (git subprocess)
 ```
 
-- **cli.py** — typer commands: `config init/show`, `fetch`, `track`, `untrack`, `list`, `sync`, `history`, `export`, `import`
+- **cli.py** — typer commands: `config init/show`, `remote fetch/list`, `track`, `untrack`, `list`, `sync`, `info`
 - **config.py** — YAML config r/w + JSON project list r/w, dataclasses (`Config`, `FoundryConfig`, `Project`), path via `platformdirs`
-- **services.py** — business logic: `fetch_repos()`, `track_project()`, `untrack_project()`, `export_projects()`, `import_projects()`
-- **foundry/github.py**, **foundry/gitea.py** — API clients with Link-header pagination
+- **services.py** — business logic: `fetch_repos()`, `track_project()`, `untrack_project()`, `sync_projects()`
+- **index.py** — local index of remote repos: `save_index()`, `load_index()`, `search_index()`
+- **gitops.py** — git subprocess wrappers: `clone_repo()`, `pull_repo()`, `push_repo()`, `is_dirty()`
+- **foundry/github.py**, **foundry/gitea.py**, **foundry/gitlab.py** — API clients with Link-header pagination
 - **foundry/__init__.py** — shared `RemoteRepo` dataclass
 - **formatting.py** — ANSI terminal output via `typer.style()`
 
@@ -55,10 +59,3 @@ Storage at `$XDG_DATA_HOME/git-projects/`:
 - ruff format (100-char lines), ruff check, mypy strict on `src/`
 - One-liner docstrings for non-trivial functions
 - Tests use `pytest` + `monkeypatch`, `httpx` mocks (no external API calls), `tmp_path` for file I/O, `typer.testing.CliRunner` for CLI tests
-
-## Incomplete Features
-
-- `sync` command — needs a `gitops` module for clone/pull operations
-- `history` command — declared but not implemented
-- `export` / `import` commands — not yet implemented
-

@@ -2,7 +2,7 @@
 
 ## Problem and context
 
-A developer working across multiple git foundries (GitHub, GitLab, self-hosted Gitea) loses track of what they worked on and where. There is no unified view of recent activity across all repositories. This tool provides a local-first CLI that discovers repos via APIs, tracks them locally, and generates activity summaries from git history.
+A developer working across multiple git foundries (GitHub, GitLab, self-hosted Gitea) loses track of what they worked on and where. There is no unified way to discover and manage repos across all foundries. This tool provides a local-first CLI that discovers repos via APIs, tracks them locally, and keeps them synced.
 
 ## Goals and non-goals
 
@@ -11,9 +11,8 @@ A developer working across multiple git foundries (GitHub, GitLab, self-hosted G
 1. Discover repos from GitHub, GitLab, and Gitea APIs — list available repos on demand.
 2. Let the user explicitly select which repos to track via config.
 3. Clone and sync tracked repos locally at a configured base path.
-4. Provide project list and history views from local git log.
+4. Provide a project list view of tracked repos.
 5. Config file (`config.yaml`), project list (`projects.json`), and local index (`index.json`) under `XDG_DATA_HOME/git-projects/`.
-6. Export/import tracked projects as portable JSON for multi-machine workflows.
 
 ### Non-goals
 
@@ -25,7 +24,7 @@ A developer working across multiple git foundries (GitHub, GitLab, self-hosted G
 
 ## System overview
 
-The tool is a local CLI application. `remote fetch` calls foundry APIs concurrently, saves results to a local index (`index.json`), and prints a summary. `remote list` reads the index and filters by query/recency — no network required. `track` accepts a repo name (looked up from the index) or a direct clone URL. `sync` clones missing and pulls existing tracked repos. `list` and `history` read from local state and git repos. `export` and `import` transfer the project list between machines as portable JSON.
+The tool is a local CLI application. `remote fetch` calls foundry APIs concurrently, saves results to a local index (`index.json`), and prints a summary. `remote list` reads the index and filters by query/recency — no network required. `track` accepts a repo name (looked up from the index) or a direct clone URL. `sync` clones missing and pulls existing tracked repos. `list` shows tracked projects.
 
 ```mermaid
 graph LR
@@ -33,14 +32,11 @@ graph LR
     CLI --> Config[Config Module]
     CLI --> Index[Index Module]
     CLI --> GitOps[Git Operations]
-    CLI --> History[History Builder]
 
     Config -- reads/writes --> YAML[(config.yaml<br>XDG_DATA_HOME)]
     Config -- reads/writes --> ProjJSON[(projects.json<br>XDG_DATA_HOME)]
     Index -- reads/writes --> JSON[(index.json<br>XDG_DATA_HOME)]
-    GitOps -- clone/pull/log --> LocalRepos[(Local repos on disk)]
-    History -- reads --> LocalRepos
-    History -- reads --> Config
+    GitOps -- clone/pull --> LocalRepos[(Local repos on disk)]
 
     CLI --> Foundry[Foundry Clients]
     Foundry --> GH[GitHub API]
@@ -72,9 +68,6 @@ graph LR
 | `untrack <name>` | Remove a project from projects.json |
 | `list` | Show tracked projects |
 | `sync` | Clone missing repos, pull existing tracked repos |
-| `history [name]` | Git log summaries for tracked projects |
-| `export [file]` | Export tracked projects to JSON (stdout or file) |
-| `import <file>` | Import projects from JSON, skip duplicates with warning |
 
 ### Workflow
 
@@ -84,27 +77,23 @@ remote list [query]     → browse index (fast, no network)
 track <name>            → add by name from index
 sync                    → clone & pull all tracked projects
 list                    → see what you're tracking
-history [name]          → see recent git activity
 untrack <name>          → stop tracking a project
-export [file]           → export projects as portable JSON
-import <file>           → import projects, then sync
 ```
 
 ## Module boundaries
 
 ### `cli` — Command-line interface
 - **Owns**: Argument parsing, output formatting, subcommand dispatch.
-- **Public interface**: `app` (typer instance) with commands: `config` (group: `init`, `show`), `remote` (group: `fetch`, `list`), `track`, `untrack`, `list`, `sync`, `history`, `export`, `import`.
+- **Public interface**: `app` (typer instance) with commands: `config` (group: `init`, `show`), `remote` (group: `fetch`, `list`), `track`, `untrack`, `list`, `sync`, `info`.
 - **Must NOT**: Contain business logic, call git directly, or manage state.
 
 ### `config` — Configuration and project tracking
 - **Owns**: Reading/writing `config.yaml` (settings + credentials) and `projects.json` (tracked project list).
-- **Public interface**: `load_config() -> Config`, `save_config(Config)`, `init_config() -> Path`, `load_projects() -> list[Project]`, `save_projects(list[Project])`, `add_project(clone_url) -> Project`, `remove_project(name) -> bool`, `export_projects(path | None)`, `import_projects(path) -> ImportResult`.
+- **Public interface**: `load_config() -> Config`, `save_config(Config)`, `init_config() -> Path`, `load_projects() -> list[Project]`, `save_projects(list[Project])`, `add_project(clone_url) -> Project`, `remove_project(name) -> bool`.
 - **Data types**:
   - `FoundryConfig`: `name`, `type`, `url`, `token`.
   - `Project`: `clone_url`, `name`, `path` (relative to `clone_root`).
   - `Config`: `clone_root`, `foundries: list[FoundryConfig]`, `clone_url_format: str` (`"ssh"` | `"https"`, default `"ssh"`).
-  - `ImportResult`: `added: list[str]`, `skipped: list[str]`.
 - **Must NOT**: Call APIs or run git commands.
 - **Storage layout**:
   ```
@@ -145,7 +134,6 @@ import <file>           → import projects, then sync
   ]
   ```
 - **Path derivation**: Project `path` is stored **relative to `clone_root`** (e.g. `"repo-a"`, not `"~/projects/repo-a"`). Resolved to an absolute path at runtime via `clone_root / path`. When `track` is called with a clone URL, `name` is extracted from the URL (last path segment without `.git`), and `path` defaults to `name`. Both HTTPS (`https://host/user/repo.git`) and SCP-style SSH (`git@host:user/repo.git`) URLs are supported. Pass `--path <dir>` to override the relative path. When called with a name (no `://` or `git@`), the clone URL is resolved from the local index.
-- **Export/import**: `export` writes `projects.json` content to stdout or a file path. `import` reads a JSON file, merges into `projects.json`, and skips duplicates (matched by `clone_url`) with a warning per skipped project.
 
 ### `index` — Local repo index
 - **Owns**: Reading/writing `index.json`, filtering and sorting cached repo metadata.
@@ -161,14 +149,9 @@ import <file>           → import projects, then sync
 - **Must NOT**: Clone repos, modify config, or read git history.
 
 ### `gitops` — Local git operations
-- **Owns**: Cloning repos, pulling updates, reading git log.
-- **Public interface**: `clone_repo(url, path)`, `pull_repo(path)`, `get_log(path, since: date | None) -> list[Commit]`.
+- **Owns**: Cloning repos, pulling updates.
+- **Public interface**: `clone_repo(url, path)`, `pull_repo(path)`, `push_repo(path)`, `is_dirty(path) -> bool`.
 - **Must NOT**: Call foundry APIs or write to config.
-
-### `history` — History and changelog generation
-- **Owns**: Aggregating commits into summaries, grouping by project/date, formatting output.
-- **Public interface**: `build_project_list(projects) -> str`, `build_brief_history(projects) -> str`, `build_detailed_history(project) -> str`.
-- **Must NOT**: Call git or APIs directly — receives data from gitops.
 
 ### Communication patterns
 
@@ -181,15 +164,12 @@ All communication is **synchronous function calls**. No events, no message queue
 6. `untrack`: config (remove project from projects.json)
 7. `list`: config (load projects, print)
 8. `sync`: config (load projects) → gitops (clone missing, pull existing)
-9. `history`: config (load projects) → gitops (log) → history (format)
-10. `export`: config (load projects) → write JSON to stdout or file
-11. `import`: read JSON file → config (merge into projects.json, skip duplicates with warning)
 
 ## Key architectural decisions
 
 ### Decision: Three-file storage — config.yaml, projects.json, index.json
 - **Alternatives considered**: Single config file with everything, two files (config + index).
-- **Rationale**: `config.yaml` holds credentials and settings — hand-editable, never shared. `projects.json` holds the tracked project list — machine-managed, portable, no secrets. `index.json` is an ephemeral cache of API data. This separation means `export`/`import` can transfer `projects.json` between machines without leaking tokens. Project paths are stored relative to `clone_root`, so the same `projects.json` works on machines with different directory layouts.
+- **Rationale**: `config.yaml` holds credentials and settings — hand-editable, never shared. `projects.json` holds the tracked project list — machine-managed, portable, no secrets. `index.json` is an ephemeral cache of API data. This separation keeps credentials out of the portable project list. Project paths are stored relative to `clone_root`, so the same `projects.json` works on machines with different directory layouts.
 
 ### Decision: Shell out to `git` instead of using GitPython/pygit2
 - **Alternatives considered**: GitPython, pygit2, dulwich.
@@ -223,6 +203,5 @@ All communication is **synchronous function calls**. No events, no message queue
 
 ## Open questions
 
-1. **Changelog quality**: Raw commit messages may be noisy. Should we group by date only, or attempt to deduplicate/summarize? Defer to implementation — start with date-grouped commit lists, improve later.
-2. ~~**Auth flow**~~: Resolved — `init` creates config with GitHub placeholder; user edits YAML to add tokens and foundries.
-3. **Clone depth**: Should `clone` use `--depth 1` or full clone? Full clone gives complete history but uses more disk. [ASSUMPTION: full clone for complete history.]
+1. ~~**Auth flow**~~: Resolved — `init` creates config with GitHub placeholder; user edits YAML to add tokens and foundries.
+2. **Clone depth**: Should `clone` use `--depth 1` or full clone? Full clone gives complete history but uses more disk. [ASSUMPTION: full clone for complete history.]
