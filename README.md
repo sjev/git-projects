@@ -2,7 +2,6 @@
 
 Discover, track, and sync Git repos across GitHub, GitLab, and Gitea from one CLI.
 
-Local-first. Config-driven. No daemon.
 
 ## Why
 
