@@ -28,19 +28,22 @@ CLI (typer) → Config (YAML) → Services (orchestration)
                            Foundry Clients (GitHub, Gitea)
 ```
 
-- **cli.py** — typer commands: `config init/show`, `fetch`, `track`, `untrack`, `list`, `sync`, `history`
-- **config.py** — YAML config r/w, dataclasses (`Config`, `FoundryConfig`, `Project`), path via `platformdirs`
-- **services.py** — business logic: `fetch_repos()`, `track_project()`, `untrack_project()`
+- **cli.py** — typer commands: `config init/show`, `fetch`, `track`, `untrack`, `list`, `sync`, `history`, `export`, `import`
+- **config.py** — YAML config r/w + JSON project list r/w, dataclasses (`Config`, `FoundryConfig`, `Project`), path via `platformdirs`
+- **services.py** — business logic: `fetch_repos()`, `track_project()`, `untrack_project()`, `export_projects()`, `import_projects()`
 - **foundry/github.py**, **foundry/gitea.py** — API clients with Link-header pagination
 - **foundry/__init__.py** — shared `RemoteRepo` dataclass
 - **formatting.py** — ANSI terminal output via `typer.style()`
 
-Config lives at `$XDG_DATA_HOME/git-projects/config.yaml`. Config is the source of truth; API data is ephemeral.
+Storage at `$XDG_DATA_HOME/git-projects/`:
+- `config.yaml` — settings + foundry credentials (never shared)
+- `projects.json` — tracked projects with paths relative to `clone_root` (portable, no secrets)
+- `index.json` — ephemeral cache of remote repo metadata
 
 ## Design Decisions
 
 - Shell out to git (not GitPython)
-- YAML config (not SQLite) — human-readable, hand-editable
+- YAML config (not SQLite) — human-readable, hand-editable; projects in separate JSON (portable, no secrets)
 - httpx (not requests) — modern, typed, HTTP/2
 - Dataclasses + functions (no classes where unnecessary, no Pydantic)
 - ANSI colors via typer (no rich, no tables)
@@ -57,3 +60,5 @@ Config lives at `$XDG_DATA_HOME/git-projects/config.yaml`. Config is the source 
 
 - `sync` command — needs a `gitops` module for clone/pull operations
 - `history` command — declared but not implemented
+- `export` / `import` commands — not yet implemented
+- **Migration**: existing `config.yaml` with `projects: []` needs migration to split `projects.json`

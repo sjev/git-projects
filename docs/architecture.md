@@ -12,7 +12,8 @@ A developer working across multiple git foundries (GitHub, GitLab, self-hosted G
 2. Let the user explicitly select which repos to track via config.
 3. Clone and sync tracked repos locally at a configured base path.
 4. Provide project list and history views from local git log.
-5. Config file (`config.yaml`) and local index (`index.json`) under `XDG_DATA_HOME/git-projects/`.
+5. Config file (`config.yaml`), project list (`projects.json`), and local index (`index.json`) under `XDG_DATA_HOME/git-projects/`.
+6. Export/import tracked projects as portable JSON for multi-machine workflows.
 
 ### Non-goals
 
@@ -24,7 +25,7 @@ A developer working across multiple git foundries (GitHub, GitLab, self-hosted G
 
 ## System overview
 
-The tool is a local CLI application. `remote fetch` calls foundry APIs concurrently, saves results to a local index (`index.json`), and prints a summary. `remote list` reads the index and filters by query/recency — no network required. `track` accepts a repo name (looked up from the index) or a direct clone URL. `sync` clones missing and pulls existing tracked repos. `list` and `history` read from local state and git repos.
+The tool is a local CLI application. `remote fetch` calls foundry APIs concurrently, saves results to a local index (`index.json`), and prints a summary. `remote list` reads the index and filters by query/recency — no network required. `track` accepts a repo name (looked up from the index) or a direct clone URL. `sync` clones missing and pulls existing tracked repos. `list` and `history` read from local state and git repos. `export` and `import` transfer the project list between machines as portable JSON.
 
 ```mermaid
 graph LR
@@ -35,6 +36,7 @@ graph LR
     CLI --> History[History Builder]
 
     Config -- reads/writes --> YAML[(config.yaml<br>XDG_DATA_HOME)]
+    Config -- reads/writes --> ProjJSON[(projects.json<br>XDG_DATA_HOME)]
     Index -- reads/writes --> JSON[(index.json<br>XDG_DATA_HOME)]
     GitOps -- clone/pull/log --> LocalRepos[(Local repos on disk)]
     History -- reads --> LocalRepos
@@ -67,10 +69,12 @@ graph LR
 | `remote fetch [foundry]` | Fetch repos from foundry APIs concurrently, save to local index |
 | `remote list [query] [--all]` | Show repos from local index; optional name/description filter; `--all` disables 180-day cutoff |
 | `track <name\|url> [--path <dir>]` | Add a project — name looked up in index, or direct clone URL |
-| `untrack <name>` | Remove a project from config.yaml |
+| `untrack <name>` | Remove a project from projects.json |
 | `list` | Show tracked projects |
 | `sync` | Clone missing repos, pull existing tracked repos |
 | `history [name]` | Git log summaries for tracked projects |
+| `export [file]` | Export tracked projects to JSON (stdout or file) |
+| `import <file>` | Import projects from JSON, skip duplicates with warning |
 
 ### Workflow
 
@@ -82,27 +86,31 @@ sync                    → clone & pull all tracked projects
 list                    → see what you're tracking
 history [name]          → see recent git activity
 untrack <name>          → stop tracking a project
+export [file]           → export projects as portable JSON
+import <file>           → import projects, then sync
 ```
 
 ## Module boundaries
 
 ### `cli` — Command-line interface
 - **Owns**: Argument parsing, output formatting, subcommand dispatch.
-- **Public interface**: `app` (typer instance) with commands: `config` (group: `init`, `show`), `remote` (group: `fetch`, `list`), `track`, `untrack`, `list`, `sync`, `history`.
+- **Public interface**: `app` (typer instance) with commands: `config` (group: `init`, `show`), `remote` (group: `fetch`, `list`), `track`, `untrack`, `list`, `sync`, `history`, `export`, `import`.
 - **Must NOT**: Contain business logic, call git directly, or manage state.
 
 ### `config` — Configuration and project tracking
-- **Owns**: Reading/writing `config.yaml`, managing the project list.
-- **Public interface**: `load_config() -> Config`, `save_config(Config)`, `init_config() -> Path`, `add_project(clone_url) -> Project`, `remove_project(name) -> bool`.
+- **Owns**: Reading/writing `config.yaml` (settings + credentials) and `projects.json` (tracked project list).
+- **Public interface**: `load_config() -> Config`, `save_config(Config)`, `init_config() -> Path`, `load_projects() -> list[Project]`, `save_projects(list[Project])`, `add_project(clone_url) -> Project`, `remove_project(name) -> bool`, `export_projects(path | None)`, `import_projects(path) -> ImportResult`.
 - **Data types**:
   - `FoundryConfig`: `name`, `type`, `url`, `token`.
-  - `Project`: `clone_url`, `name`, `path`.
-  - `Config`: `clone_root`, `foundries: list[FoundryConfig]`, `projects: list[Project]`, `clone_url_format: str` (`"ssh"` | `"https"`, default `"ssh"`).
+  - `Project`: `clone_url`, `name`, `path` (relative to `clone_root`).
+  - `Config`: `clone_root`, `foundries: list[FoundryConfig]`, `clone_url_format: str` (`"ssh"` | `"https"`, default `"ssh"`).
+  - `ImportResult`: `added: list[str]`, `skipped: list[str]`.
 - **Must NOT**: Call APIs or run git commands.
 - **Storage layout**:
   ```
   $XDG_DATA_HOME/git-projects/
-  ├── config.yaml      # foundries, clone root, tracked projects
+  ├── config.yaml      # foundries, clone_root, clone_url_format (credentials)
+  ├── projects.json    # tracked projects (portable, no secrets)
   └── index.json       # cached repo list from last remote fetch
   ```
 - **Default config.yaml created by `init`**:
@@ -120,26 +128,24 @@ untrack <name>          → stop tracking a project
     #   type: gitea
     #   url: https://gitea.example.com
     #   token: ""
-  projects: []
   ```
-- **Example config.yaml with tracked projects**:
-  ```yaml
-  clone_root: ~/projects
-  foundries:
-    - name: github
-      type: github
-      url: https://api.github.com
-      token: "ghp_..."
-
-  projects:
-    - clone_url: https://github.com/user/repo-a.git
-      name: repo-a
-      path: ~/projects/repo-a
-    - clone_url: https://gitlab.com/user/repo-b.git
-      name: repo-b
-      path: ~/projects/repo-b
+- **Example projects.json**:
+  ```json
+  [
+    {
+      "clone_url": "https://github.com/user/repo-a.git",
+      "name": "repo-a",
+      "path": "repo-a"
+    },
+    {
+      "clone_url": "https://gitlab.com/user/repo-b.git",
+      "name": "repo-b",
+      "path": "repo-b"
+    }
+  ]
   ```
-- **Path derivation**: When `track` is called with a clone URL, `name` is extracted from the URL (last path segment without `.git`), and `path` is derived as `{clone_root}/{name}`. Both HTTPS (`https://host/user/repo.git`) and SCP-style SSH (`git@host:user/repo.git`) URLs are supported. Pass `--path <dir>` to override the local path entirely. When called with a name (no `://` or `git@`), the clone URL is resolved from the local index.
+- **Path derivation**: Project `path` is stored **relative to `clone_root`** (e.g. `"repo-a"`, not `"~/projects/repo-a"`). Resolved to an absolute path at runtime via `clone_root / path`. When `track` is called with a clone URL, `name` is extracted from the URL (last path segment without `.git`), and `path` defaults to `name`. Both HTTPS (`https://host/user/repo.git`) and SCP-style SSH (`git@host:user/repo.git`) URLs are supported. Pass `--path <dir>` to override the relative path. When called with a name (no `://` or `git@`), the clone URL is resolved from the local index.
+- **Export/import**: `export` writes `projects.json` content to stdout or a file path. `import` reads a JSON file, merges into `projects.json`, and skips duplicates (matched by `clone_url`) with a warning per skipped project.
 
 ### `index` — Local repo index
 - **Owns**: Reading/writing `index.json`, filtering and sorting cached repo metadata.
@@ -171,17 +177,19 @@ All communication is **synchronous function calls**. No events, no message queue
 2. `config show`: config (load config, print path + content)
 3. `remote fetch`: foundry (concurrent API calls) → index (save all repos) → print summary
 4. `remote list`: index (load + filter) → print repos
-5. `track`: index (name lookup, optional) → config (add project to config.yaml)
-6. `untrack`: config (remove project from config.yaml)
+5. `track`: index (name lookup, optional) → config (add project to projects.json)
+6. `untrack`: config (remove project from projects.json)
 7. `list`: config (load projects, print)
 8. `sync`: config (load projects) → gitops (clone missing, pull existing)
 9. `history`: config (load projects) → gitops (log) → history (format)
+10. `export`: config (load projects) → write JSON to stdout or file
+11. `import`: read JSON file → config (merge into projects.json, skip duplicates with warning)
 
 ## Key architectural decisions
 
-### Decision: Separate index.json from config.yaml
-- **Alternatives considered**: Single config file with tracked+discovered repos, per-foundry cache files.
-- **Rationale**: `config.yaml` captures user intent (what to track) and is hand-editable. `index.json` is a machine-managed cache of API data — mixing them would make the config file grow with hundreds of repos the user doesn't care about. Separating them keeps config stable and human-readable while the index can be freely overwritten by `remote fetch`.
+### Decision: Three-file storage — config.yaml, projects.json, index.json
+- **Alternatives considered**: Single config file with everything, two files (config + index).
+- **Rationale**: `config.yaml` holds credentials and settings — hand-editable, never shared. `projects.json` holds the tracked project list — machine-managed, portable, no secrets. `index.json` is an ephemeral cache of API data. This separation means `export`/`import` can transfer `projects.json` between machines without leaking tokens. Project paths are stored relative to `clone_root`, so the same `projects.json` works on machines with different directory layouts.
 
 ### Decision: Shell out to `git` instead of using GitPython/pygit2
 - **Alternatives considered**: GitPython, pygit2, dulwich.
