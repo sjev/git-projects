@@ -6,13 +6,15 @@ from typing import Annotated
 import httpx
 import typer
 
-from git_projects import config
+from git_projects import config, index
 from git_projects.formatting import format_repo
 from git_projects.services import fetch_repos, sync_projects, track_project, untrack_project
 
 app = typer.Typer(no_args_is_help=True)
 config_app = typer.Typer(no_args_is_help=True)
+remote_app = typer.Typer(no_args_is_help=True)
 app.add_typer(config_app, name="config", help="Manage configuration.")
+app.add_typer(remote_app, name="remote", help="Browse and refresh remote repos.")
 
 
 def _version_callback(value: bool) -> None:
@@ -69,28 +71,18 @@ def _load_config_or_exit() -> config.Config:
         raise typer.Exit(code=1) from exc
 
 
-@app.command()
+@remote_app.command()
 def fetch(
     foundry_name: Annotated[str | None, typer.Argument(help="Foundry name to fetch from.")] = None,
-    show_all: Annotated[
-        bool, typer.Option("--show-all", help="Show all repos, not just recent ones.")
-    ] = False,
 ) -> None:
-    """Fetch and print available repos from foundry APIs."""
+    """Fetch repos from foundry APIs and save to local index."""
     cfg = _load_config_or_exit()
 
-    foundry_count = 0
-
-    def _on_foundry_start(name: str) -> None:
-        nonlocal foundry_count
-        foundry_count += 1
-        sys.stdout.write(f"\rFetching {name}...")
-        sys.stdout.flush()
+    sys.stdout.write("Fetching...")
+    sys.stdout.flush()
 
     try:
-        repos = fetch_repos(
-            cfg, foundry_name, show_all=show_all, on_foundry_start=_on_foundry_start
-        )
+        repos = fetch_repos(cfg, foundry_name)
     except ValueError as exc:
         sys.stdout.write("\r\033[K")
         print(exc)
@@ -103,8 +95,37 @@ def fetch(
             print(f"Error: API returned {exc.response.status_code} for foundry '{foundry_name}'.")
         raise typer.Exit(code=1) from None
 
-    summary = typer.style(f"Fetched {len(repos)} repos from {foundry_count} foundries", bold=True)
-    print(f"\r\033[K\n{summary}\n{'─' * 60}")
+    n_foundries = len(cfg.foundries) if foundry_name is None else 1
+    summary = typer.style(f"Fetched {len(repos)} repos from {n_foundries} foundries", bold=True)
+    print(f"\r\033[K{summary}")
+
+
+@remote_app.command(name="list")
+def remote_list(
+    query: Annotated[
+        str | None, typer.Argument(help="Filter by name or description substring.")
+    ] = None,
+    show_all: Annotated[
+        bool, typer.Option("--all", help="Show all repos, not just recent ones.")
+    ] = False,
+) -> None:
+    """Show repos from local index."""
+    repos = index.load_index()
+
+    if not repos:
+        print("Index is empty. Run 'git-projects remote fetch' first.")
+        raise typer.Exit(code=1)
+
+    max_age = None if show_all else 180
+    repos = index.search_index(repos, query, max_age_days=max_age)
+
+    if not repos:
+        hint = f" matching '{query}'" if query else ""
+        print(f"No repos{hint} in index.")
+        return
+
+    summary = typer.style(f"{len(repos)} repos", bold=True)
+    print(f"{summary}\n{'─' * 60}")
 
     for repo in repos:
         print()
@@ -113,7 +134,9 @@ def fetch(
 
 @app.command()
 def track(
-    clone_url: Annotated[str, typer.Argument(help="Clone URL of the repo to track.")],
+    name_or_url: Annotated[
+        str, typer.Argument(help="Repo name (from index) or clone URL to track.")
+    ],
     path: Annotated[
         str | None, typer.Option("--path", "-p", help="Override local clone path.")
     ] = None,
@@ -122,7 +145,7 @@ def track(
     cfg = _load_config_or_exit()
 
     try:
-        project = track_project(cfg, clone_url, path)
+        project = track_project(cfg, name_or_url, path)
     except ValueError as exc:
         print(exc)
         raise typer.Exit(code=1) from None
@@ -153,7 +176,7 @@ def list_projects() -> None:
     cfg = _load_config_or_exit()
 
     if not cfg.projects:
-        print("No projects tracked. Use 'git-projects track <clone_url>' to add one.")
+        print("No projects tracked. Use 'git-projects track <name>' to add one.")
         return
 
     for project in cfg.projects:
@@ -166,7 +189,7 @@ def sync() -> None:
     cfg = _load_config_or_exit()
 
     if not cfg.projects:
-        print("No projects tracked. Use 'git-projects track <clone_url>' to add one.")
+        print("No projects tracked. Use 'git-projects track <name>' to add one.")
         return
 
     _STATUS_COLOR = {

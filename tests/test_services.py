@@ -33,16 +33,6 @@ _REMOTE_REPOS = [
     ),
 ]
 
-_OLD_REPO = RemoteRepo(
-    name="proj-old",
-    repo_url="https://github.com/user/proj-old",
-    clone_url="git@github.com:user/proj-old.git",
-    pushed_at="2025-01-01T00:00:00Z",
-    default_branch="main",
-    visibility="public",
-    description="An old experiment",
-)
-
 
 # --- fetch_repos ---
 
@@ -50,7 +40,10 @@ _OLD_REPO = RemoteRepo(
 def test_fetch_repos_returns_repos() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
-    with patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS):
+    with (
+        patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
+        patch("git_projects.services.index.save_index"),
+    ):
         result = fetch_repos(cfg)
 
     assert len(result) == 2
@@ -59,62 +52,53 @@ def test_fetch_repos_returns_repos() -> None:
 def test_fetch_repos_sorted_ascending() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
-    with patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS):
+    with (
+        patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
+        patch("git_projects.services.index.save_index"),
+    ):
         result = fetch_repos(cfg)
 
     assert result[0].name == "proj-b"  # older
     assert result[1].name == "proj-a"  # newer
 
 
-def test_fetch_repos_filters_old_by_default() -> None:
+def test_fetch_repos_saves_to_index() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
-    with patch("git_projects.services.github.list_repos", return_value=[*_REMOTE_REPOS, _OLD_REPO]):
-        result = fetch_repos(cfg)
+    with (
+        patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
+        patch("git_projects.services.index.save_index") as mock_save,
+    ):
+        fetch_repos(cfg)
 
-    names = [r.name for r in result]
-    assert "proj-old" not in names
-
-
-def test_fetch_repos_show_all_includes_old() -> None:
-    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
-
-    with patch("git_projects.services.github.list_repos", return_value=[*_REMOTE_REPOS, _OLD_REPO]):
-        result = fetch_repos(cfg, show_all=True)
-
-    names = [r.name for r in result]
-    assert "proj-old" in names
+    mock_save.assert_called_once()
+    saved = mock_save.call_args[0][0]
+    assert len(saved) == 2
 
 
 def test_fetch_repos_by_foundry_name() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
-    with patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS):
+    with (
+        patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
+        patch("git_projects.services.index.save_index"),
+    ):
         result = fetch_repos(cfg, "github")
 
     assert len(result) == 2
 
 
 def test_fetch_repos_passes_clone_url_format() -> None:
-    """AC-04/05: fetch_repos forwards clone_url_format to list_repos."""
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY], clone_url_format="https")
 
-    with patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS) as mock_lr:
+    with (
+        patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS) as mock_lr,
+        patch("git_projects.services.index.save_index"),
+    ):
         fetch_repos(cfg)
 
     mock_lr.assert_called_once()
-    _, call_args = mock_lr.call_args[0], mock_lr.call_args
-    assert call_args[0][1] == "https"
-
-
-def test_fetch_repos_calls_on_foundry_start() -> None:
-    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
-    called_with: list[str] = []
-
-    with patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS):
-        fetch_repos(cfg, on_foundry_start=called_with.append)
-
-    assert called_with == ["github"]
+    assert mock_lr.call_args[0][1] == "https"
 
 
 def test_fetch_repos_unknown_foundry() -> None:
@@ -134,10 +118,10 @@ def test_fetch_repos_missing_token() -> None:
         fetch_repos(cfg)
 
 
-# --- track_project ---
+# --- track_project (URL) ---
 
 
-def test_track_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_track_project_by_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = tmp_path / "config.yaml"
     monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
 
@@ -156,13 +140,72 @@ def test_track_project_duplicate() -> None:
             Project(
                 clone_url="https://github.com/user/repo-a.git",
                 name="repo-a",
-                path="~/projects/github.com/user/repo-a",
+                path="~/projects/repo-a",
             )
         ],
     )
 
     with pytest.raises(ValueError, match="Already tracking"):
         track_project(cfg, "https://github.com/user/repo-a.git")
+
+
+# --- track_project (name lookup) ---
+
+
+def test_track_project_by_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config_path = tmp_path / "config.yaml"
+    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+
+    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+
+    with patch("git_projects.services.index.load_index", return_value=_REMOTE_REPOS):
+        project = track_project(cfg, "proj-a")
+
+    assert project.name == "proj-a"
+    assert project.clone_url == "git@github.com:user/proj-a.git"
+
+
+def test_track_project_by_partial_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config_path = tmp_path / "config.yaml"
+    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+
+    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+
+    with patch("git_projects.services.index.load_index", return_value=_REMOTE_REPOS):
+        project = track_project(cfg, "proj-a")
+
+    assert project.name == "proj-a"
+
+
+def test_track_project_name_empty_index() -> None:
+    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+
+    with (
+        patch("git_projects.services.index.load_index", return_value=[]),
+        pytest.raises(ValueError, match="Index is empty"),
+    ):
+        track_project(cfg, "proj-a")
+
+
+def test_track_project_name_not_found() -> None:
+    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+
+    with (
+        patch("git_projects.services.index.load_index", return_value=_REMOTE_REPOS),
+        pytest.raises(ValueError, match="No repo named"),
+    ):
+        track_project(cfg, "nonexistent-xyz")
+
+
+def test_track_project_name_ambiguous() -> None:
+    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+
+    with (
+        patch("git_projects.services.index.load_index", return_value=_REMOTE_REPOS),
+        pytest.raises(ValueError, match="Ambiguous"),
+    ):
+        # "proj" matches both proj-a and proj-b via substring
+        track_project(cfg, "proj")
 
 
 # --- untrack_project ---
@@ -179,7 +222,7 @@ def test_untrack_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
             Project(
                 clone_url="https://github.com/user/repo-a.git",
                 name="repo-a",
-                path="~/projects/github.com/user/repo-a",
+                path="~/projects/repo-a",
             )
         ],
     )

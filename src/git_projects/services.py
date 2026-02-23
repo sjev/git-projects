@@ -1,28 +1,24 @@
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from git_projects import config
+from git_projects import config, index
 from git_projects.config import Config, Project
 from git_projects.foundry import RemoteRepo, gitea, github, gitlab
 from git_projects.gitops import GitError, clone_repo, is_dirty, pull_repo, push_repo
-
-RECENT_CUTOFF = timedelta(days=180)
 
 
 def fetch_repos(
     cfg: Config,
     foundry_name: str | None = None,
-    *,
-    show_all: bool = False,
-    on_foundry_start: Callable[[str], None] | None = None,
 ) -> list[RemoteRepo]:
-    """Fetch repos from configured foundries.
+    """Fetch repos from configured foundries concurrently, save to local index.
 
-    Returns a flat list of repos sorted by pushed_at ascending (oldest first).
+    Returns all repos sorted by pushed_at ascending (oldest first).
     Raises ValueError if foundry_name is given but not found.
     Lets httpx.HTTPStatusError and ValueError (missing token) propagate.
     """
@@ -32,42 +28,68 @@ def fetch_repos(
         if not foundries:
             raise ValueError(f"No foundry named '{foundry_name}' in config.")
 
-    cutoff = datetime.now(timezone.utc) - RECENT_CUTOFF
+    lock = threading.Lock()
     all_repos: list[RemoteRepo] = []
 
-    for foundry_config in foundries:
-        if foundry_config.type == "github":
-            list_repos = github.list_repos
-        elif foundry_config.type == "gitea":
-            list_repos = gitea.list_repos
-        elif foundry_config.type == "gitlab":
-            list_repos = gitlab.list_repos
+    def _fetch_one(fc: config.FoundryConfig) -> None:
+        if fc.type == "github":
+            list_fn = github.list_repos
+        elif fc.type == "gitlab":
+            list_fn = gitlab.list_repos
+        elif fc.type == "gitea":
+            list_fn = gitea.list_repos
         else:
-            continue
+            return
+        repos = list_fn(fc, cfg.clone_url_format)
+        with lock:
+            all_repos.extend(repos)
 
-        if on_foundry_start:
-            on_foundry_start(foundry_config.name)
-
-        repos = list_repos(foundry_config, cfg.clone_url_format)
-
-        if not show_all:
-            repos = [
-                r
-                for r in repos
-                if datetime.fromisoformat(r.pushed_at.replace("Z", "+00:00")) >= cutoff
-            ]
-
-        all_repos.extend(repos)
+    with ThreadPoolExecutor(max_workers=max(1, len(foundries))) as executor:
+        futures = [executor.submit(_fetch_one, fc) for fc in foundries]
+        for future in as_completed(futures):
+            future.result()  # re-raise any API or token errors
 
     all_repos.sort(key=lambda r: r.pushed_at)
+    index.save_index(all_repos)
     return all_repos
 
 
-def track_project(cfg: Config, clone_url: str, path: str | None = None) -> Project:
+def _is_url(s: str) -> bool:
+    """Return True if s looks like a clone URL rather than a repo name."""
+    return "://" in s or s.startswith("git@")
+
+
+def track_project(cfg: Config, name_or_url: str, path: str | None = None) -> Project:
     """Add a project to tracking and save config.
 
-    Raises ValueError if already tracked.
+    Accepts a clone URL (HTTPS/SSH) or a repo name looked up in the local index.
+    Raises ValueError if already tracked, name not found, or name is ambiguous.
     """
+    if _is_url(name_or_url):
+        clone_url = name_or_url
+    else:
+        repos = index.load_index()
+        if not repos:
+            raise ValueError("Index is empty. Run 'git-projects remote fetch' first.")
+        exact = [r for r in repos if r.name == name_or_url]
+        if len(exact) == 1:
+            clone_url = exact[0].clone_url
+        elif len(exact) > 1:
+            urls = ", ".join(r.clone_url for r in exact)
+            raise ValueError(f"Ambiguous: '{name_or_url}' matches multiple repos: {urls}")
+        else:
+            partial = [r for r in repos if name_or_url.lower() in r.name.lower()]
+            if len(partial) == 1:
+                clone_url = partial[0].clone_url
+            elif len(partial) > 1:
+                names = ", ".join(r.name for r in partial)
+                raise ValueError(f"Ambiguous: '{name_or_url}' matches: {names}. Be more specific.")
+            else:
+                raise ValueError(
+                    f"No repo named '{name_or_url}' in index."
+                    " Run 'git-projects remote list' to browse."
+                )
+
     if any(p.clone_url == clone_url for p in cfg.projects):
         raise ValueError(f"Already tracking: {clone_url}")
 

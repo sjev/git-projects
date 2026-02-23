@@ -52,8 +52,6 @@ _OLD_REPO = RemoteRepo(
     description="An old experiment",
 )
 
-_REMOTE_REPOS_WITH_OLD = [*_REMOTE_REPOS, _OLD_REPO]
-
 
 def test_help() -> None:
     result = runner.invoke(app, ["--help"])
@@ -137,132 +135,69 @@ def test_config_show_no_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert "config init" in result.output
 
 
-# --- fetch ---
+# --- remote fetch ---
 
 
-def test_fetch_happy_path() -> None:
+def test_remote_fetch_happy_path() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
     with (
         patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
+        patch("git_projects.services.index.save_index"),
         patch("git_projects.cli.config.load_config", return_value=cfg),
     ):
-        result = runner.invoke(app, ["fetch"])
+        result = runner.invoke(app, ["remote", "fetch"])
 
     assert result.exit_code == 0
     assert "Fetched 2 repos from 1 foundries" in result.output
-    assert "proj-a" in result.output
-    assert "https://github.com/user/proj-a" in result.output  # repo_url (browser URL)
-    assert "git@github.com:user/proj-a.git" in result.output  # clone_url
-    assert "A project" in result.output
-    assert "ago" in result.output
 
 
-def test_fetch_most_recent_last() -> None:
+def test_remote_fetch_by_foundry_name() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
     with (
         patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
+        patch("git_projects.services.index.save_index"),
         patch("git_projects.cli.config.load_config", return_value=cfg),
     ):
-        result = runner.invoke(app, ["fetch"])
+        result = runner.invoke(app, ["remote", "fetch", "github"])
 
     assert result.exit_code == 0
-    # proj-b (2025-11) should appear before proj-a (2026-02) — oldest first
-    assert result.output.index("proj-b") < result.output.index("proj-a")
+    assert "Fetched 2 repos" in result.output
 
 
-def test_fetch_filters_old_repos_by_default() -> None:
-    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
-
-    with (
-        patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS_WITH_OLD),
-        patch("git_projects.cli.config.load_config", return_value=cfg),
-    ):
-        result = runner.invoke(app, ["fetch"])
-
-    assert result.exit_code == 0
-    assert "Fetched 2 repos from 1 foundries" in result.output
-    assert "proj-old" not in result.output
-
-
-def test_fetch_show_all_includes_old_repos() -> None:
-    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
-
-    with (
-        patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS_WITH_OLD),
-        patch("git_projects.cli.config.load_config", return_value=cfg),
-    ):
-        result = runner.invoke(app, ["fetch", "--show-all"])
-
-    assert result.exit_code == 0
-    assert "Fetched 3 repos from 1 foundries" in result.output
-    assert "proj-old" in result.output
-
-
-def test_fetch_no_description_line_for_empty_description() -> None:
-    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
-
-    with (
-        patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
-        patch("git_projects.cli.config.load_config", return_value=cfg),
-    ):
-        result = runner.invoke(app, ["fetch"])
-
-    # proj-b has empty description — should only have name line + url line (2 lines)
-    lines = result.output.splitlines()
-    proj_b_idx = next(i for i, ln in enumerate(lines) if "proj-b" in ln)
-    assert "github.com/user/proj-b" in lines[proj_b_idx + 1]
-    # Next non-blank line should NOT be a description — it should be the next repo or end
-    next_content = lines[proj_b_idx + 2].strip() if proj_b_idx + 2 < len(lines) else ""
-    assert next_content == "" or "proj-" in next_content
-
-
-def test_fetch_by_foundry_name() -> None:
-    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
-
-    with (
-        patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
-        patch("git_projects.cli.config.load_config", return_value=cfg),
-    ):
-        result = runner.invoke(app, ["fetch", "github"])
-
-    assert result.exit_code == 0
-    assert "proj-a" in result.output
-
-
-def test_fetch_unknown_foundry() -> None:
+def test_remote_fetch_unknown_foundry() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
     with patch("git_projects.cli.config.load_config", return_value=cfg):
-        result = runner.invoke(app, ["fetch", "nonexistent"])
+        result = runner.invoke(app, ["remote", "fetch", "nonexistent"])
 
     assert result.exit_code == 1
     assert "nonexistent" in result.output
 
 
-def test_fetch_no_config() -> None:
+def test_remote_fetch_no_config() -> None:
     with patch("git_projects.cli.config.load_config", side_effect=FileNotFoundError):
-        result = runner.invoke(app, ["fetch"])
+        result = runner.invoke(app, ["remote", "fetch"])
 
     assert result.exit_code == 1
     assert "config init" in result.output
 
 
-def test_fetch_empty_token() -> None:
+def test_remote_fetch_empty_token() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
     with (
         patch("git_projects.cli.config.load_config", return_value=cfg),
         patch("git_projects.services.github.list_repos", side_effect=ValueError("token")),
     ):
-        result = runner.invoke(app, ["fetch"])
+        result = runner.invoke(app, ["remote", "fetch"])
 
     assert result.exit_code == 1
     assert "token" in result.output.lower()
 
 
-def test_fetch_auth_error() -> None:
+def test_remote_fetch_auth_error() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
     request = httpx.Request("GET", "https://api.github.com/user/repos")
     response = httpx.Response(401)
@@ -275,16 +210,79 @@ def test_fetch_auth_error() -> None:
             side_effect=httpx.HTTPStatusError("401", request=request, response=response),
         ),
     ):
-        result = runner.invoke(app, ["fetch"])
+        result = runner.invoke(app, ["remote", "fetch"])
 
     assert result.exit_code == 1
     assert "401" in result.output
 
 
+# --- remote list ---
+
+
+def test_remote_list_empty_index() -> None:
+    with patch("git_projects.cli.index.load_index", return_value=[]):
+        result = runner.invoke(app, ["remote", "list"])
+
+    assert result.exit_code == 1
+    assert "remote fetch" in result.output
+
+
+def test_remote_list_shows_repos() -> None:
+    with patch("git_projects.cli.index.load_index", return_value=_REMOTE_REPOS):
+        result = runner.invoke(app, ["remote", "list"])
+
+    assert result.exit_code == 0
+    assert "proj-a" in result.output
+    assert "proj-b" in result.output
+    assert "https://github.com/user/proj-a" in result.output
+    assert "A project" in result.output
+
+
+def test_remote_list_filters_by_query() -> None:
+    with patch("git_projects.cli.index.load_index", return_value=_REMOTE_REPOS):
+        result = runner.invoke(app, ["remote", "list", "proj-a"])
+
+    assert result.exit_code == 0
+    assert "proj-a" in result.output
+    assert "proj-b" not in result.output
+
+
+def test_remote_list_hides_old_repos_by_default() -> None:
+    with patch("git_projects.cli.index.load_index", return_value=[*_REMOTE_REPOS, _OLD_REPO]):
+        result = runner.invoke(app, ["remote", "list"])
+
+    assert result.exit_code == 0
+    assert "proj-old" not in result.output
+
+
+def test_remote_list_all_shows_old_repos() -> None:
+    with patch("git_projects.cli.index.load_index", return_value=[*_REMOTE_REPOS, _OLD_REPO]):
+        result = runner.invoke(app, ["remote", "list", "--all"])
+
+    assert result.exit_code == 0
+    assert "proj-old" in result.output
+
+
+def test_remote_list_most_recent_last() -> None:
+    with patch("git_projects.cli.index.load_index", return_value=_REMOTE_REPOS):
+        result = runner.invoke(app, ["remote", "list"])
+
+    assert result.exit_code == 0
+    assert result.output.index("proj-b") < result.output.index("proj-a")
+
+
+def test_remote_list_no_results_for_query() -> None:
+    with patch("git_projects.cli.index.load_index", return_value=_REMOTE_REPOS):
+        result = runner.invoke(app, ["remote", "list", "zzznomatch"])
+
+    assert result.exit_code == 0
+    assert "No repos" in result.output
+
+
 # --- track ---
 
 
-def test_track_adds_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_track_adds_project_by_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = tmp_path / "config.yaml"
     monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
 
@@ -298,8 +296,7 @@ def test_track_adds_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert "https://github.com/user/repo-a.git" in result.output
 
 
-def test_track_ssh_url_shows_clone_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """AC-06: tracking an SSH URL shows the stored clone URL in output."""
+def test_track_ssh_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     config_path = tmp_path / "config.yaml"
     monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
 
@@ -313,6 +310,35 @@ def test_track_ssh_url_shows_clone_url(tmp_path: Path, monkeypatch: pytest.Monke
     assert "git@github.com:user/repo-a.git" in result.output
 
 
+def test_track_by_name_from_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config_path = tmp_path / "config.yaml"
+    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+
+    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+
+    with (
+        patch("git_projects.cli.config.load_config", return_value=cfg),
+        patch("git_projects.services.index.load_index", return_value=_REMOTE_REPOS),
+    ):
+        result = runner.invoke(app, ["track", "proj-a"])
+
+    assert result.exit_code == 0
+    assert "proj-a" in result.output
+
+
+def test_track_by_name_empty_index() -> None:
+    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+
+    with (
+        patch("git_projects.cli.config.load_config", return_value=cfg),
+        patch("git_projects.services.index.load_index", return_value=[]),
+    ):
+        result = runner.invoke(app, ["track", "proj-a"])
+
+    assert result.exit_code == 1
+    assert "remote fetch" in result.output
+
+
 def test_track_duplicate_rejected() -> None:
     cfg = Config(
         clone_root="~/projects",
@@ -321,7 +347,7 @@ def test_track_duplicate_rejected() -> None:
             Project(
                 clone_url="https://github.com/user/repo-a.git",
                 name="repo-a",
-                path="~/projects/github.com/user/repo-a",
+                path="~/projects/repo-a",
             )
         ],
     )
@@ -347,7 +373,7 @@ def test_untrack_removes_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
             Project(
                 clone_url="https://github.com/user/repo-a.git",
                 name="repo-a",
-                path="~/projects/github.com/user/repo-a",
+                path="~/projects/repo-a",
             )
         ],
     )
@@ -380,7 +406,7 @@ def test_list_shows_projects() -> None:
             Project(
                 clone_url="https://github.com/user/repo-a.git",
                 name="repo-a",
-                path="~/projects/github.com/user/repo-a",
+                path="~/projects/repo-a",
             )
         ],
     )
@@ -390,7 +416,7 @@ def test_list_shows_projects() -> None:
 
     assert result.exit_code == 0
     assert "repo-a" in result.output
-    assert "~/projects/github.com/user/repo-a" in result.output
+    assert "~/projects/repo-a" in result.output
 
 
 def test_list_empty() -> None:
@@ -460,8 +486,6 @@ def test_sync_prints_summary_line() -> None:
 
 
 def test_sync_on_project_callback_is_called() -> None:
-    """on_project callback produces colored output for each project status."""
-
     def fake_sync(projects, on_project=None):
         if on_project:
             on_project("a", "synced")
