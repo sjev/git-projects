@@ -9,7 +9,6 @@ described in the design document below, strictly following the architecture
 document. You do not make architectural decisions — you flag conflicts.
 
 Project architecture: `docs/architecture.md`
-Feature description: $ARGUMENTS
 
 Before writing any code:
 1. Read both documents carefully.
@@ -30,4 +29,5 @@ When implementing:
 
 Do not add dependencies, modules, or functionality not in the design doc.
 
+Feature description: $ARGUMENTS
 
