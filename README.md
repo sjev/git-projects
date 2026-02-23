@@ -1,4 +1,4 @@
-# git-projects
+# git-proj
 
 Discover, track, and sync Git repos across GitHub, GitLab, and Gitea from one CLI.
 
@@ -7,14 +7,14 @@ Local-first. Config-driven. No daemon.
 ## Why
 
 If you work across multiple Git foundries — GitHub, a company GitLab, a self-hosted Gitea — you lose track of what lives where.
-`git-projects` gives you one place to discover repos via APIs, pick which ones to track, and keep them synced locally.
+`git-proj` gives you one place to discover repos via APIs, pick which ones to track, and keep them synced locally.
 
 ## Install
 
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv tool install git-projects
+uv tool install git-proj
 ```
 
 Or from source:
@@ -25,33 +25,35 @@ cd git-projects
 uv sync --frozen
 ```
 
+The CLI command is `gpr`.
+
 ## Quick start
 
 ```bash
 # Create config with default foundries
-git-projects config init
+gpr config init
 
 # Edit ~/.local/share/git-projects/config.yaml to add your API tokens
 
 # Fetch all repos from configured foundries
-git-projects remote fetch
+gpr remote fetch
 
 # Browse what's available
-git-projects remote list
-git-projects remote list myproject    # filter by name
+gpr remote list
+gpr remote list myproject    # filter by name
 
 # Track a repo by name (resolved from index) or URL
-git-projects track my-repo
-git-projects track git@github.com:user/repo.git
+gpr track my-repo
+gpr track git@github.com:user/repo.git
 
 # Clone missing repos, pull & push existing ones
-git-projects sync
+gpr sync
 
 # See what you're tracking
-git-projects list
+gpr list
 
 # Stop tracking
-git-projects untrack my-repo
+gpr untrack my-repo
 ```
 
 ## Commands
@@ -99,7 +101,7 @@ foundries:
 
 ```bash
 scp ~/.local/share/git-projects/projects.json other-machine:~/.local/share/git-projects/
-git-projects sync
+gpr sync
 ```
 
 ## Development
