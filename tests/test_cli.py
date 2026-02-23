@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
@@ -8,7 +9,7 @@ import httpx
 import pytest
 from typer.testing import CliRunner
 
-from git_projects.cli import app
+from git_projects.cli import _format_age, app
 from git_projects.config import DEFAULT_CONFIG, Config, FoundryConfig, Project
 from git_projects.foundry import RemoteRepo
 
@@ -427,6 +428,123 @@ def test_list_empty() -> None:
 
     assert result.exit_code == 0
     assert "No projects tracked" in result.output
+
+
+# --- sync command ---
+
+# --- info ---
+
+
+def test_info_both_files_exist(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """AC-01, AC-02, AC-03, AC-04, AC-05, AC-07, AC-08."""
+    config_path = tmp_path / "git-projects" / "config.yaml"
+    index_path = tmp_path / "git-projects" / "index.json"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(DEFAULT_CONFIG)
+
+    updated = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    index_data = {"updated_at": updated, "repos": [{"name": "r1"}, {"name": "r2"}]}
+    index_path.write_text(json.dumps(index_data))
+
+    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+    monkeypatch.setattr("git_projects.index.get_index_path", lambda: index_path)
+
+    result = runner.invoke(app, ["info"])
+
+    assert result.exit_code == 0
+    assert "git-projects" in result.output
+    assert str(config_path) in result.output
+    assert str(index_path) in result.output
+    assert "0 tracked projects" in result.output
+    assert "2 repos" in result.output
+    assert "2h ago" in result.output
+
+
+def test_info_config_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """AC-01, AC-03, AC-06."""
+    config_path = tmp_path / "git-projects" / "config.yaml"
+    index_path = tmp_path / "git-projects" / "index.json"
+    config_path.parent.mkdir(parents=True)
+
+    updated = datetime.now(timezone.utc).isoformat()
+    index_data = {"updated_at": updated, "repos": [{"name": "r1"}]}
+    index_path.write_text(json.dumps(index_data))
+
+    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+    monkeypatch.setattr("git_projects.index.get_index_path", lambda: index_path)
+
+    result = runner.invoke(app, ["info"])
+
+    assert result.exit_code == 0
+    assert str(config_path) in result.output
+    assert "not found" in result.output
+    assert "tracked project" not in result.output
+
+
+def test_info_index_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """AC-01, AC-04, AC-09."""
+    config_path = tmp_path / "git-projects" / "config.yaml"
+    index_path = tmp_path / "git-projects" / "index.json"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text(DEFAULT_CONFIG)
+
+    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+    monkeypatch.setattr("git_projects.index.get_index_path", lambda: index_path)
+
+    result = runner.invoke(app, ["info"])
+
+    assert result.exit_code == 0
+    assert str(index_path) in result.output
+    assert "not found" in result.output
+    assert "repos" not in result.output
+
+
+def test_info_both_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """AC-01, AC-06, AC-09."""
+    config_path = tmp_path / "git-projects" / "config.yaml"
+    index_path = tmp_path / "git-projects" / "index.json"
+
+    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+    monkeypatch.setattr("git_projects.index.get_index_path", lambda: index_path)
+
+    result = runner.invoke(app, ["info"])
+
+    assert result.exit_code == 0
+    output = result.output
+    assert output.count("not found") == 2
+    assert "tracked project" not in output
+    assert "repos" not in output
+
+
+def test_info_version_fallback() -> None:
+    """AC-02 — PackageNotFoundError falls back to 'unknown'."""
+    from importlib.metadata import PackageNotFoundError
+
+    with patch("git_projects.cli.importlib.metadata.version", side_effect=PackageNotFoundError):
+        result = runner.invoke(app, ["info"])
+
+    assert result.exit_code == 0
+    assert "unknown" in result.output
+
+
+def test_format_age_just_now() -> None:
+    now = datetime.now(timezone.utc)
+    assert _format_age(now) == "just now"
+
+
+def test_format_age_minutes() -> None:
+    dt = datetime.now(timezone.utc) - timedelta(minutes=15)
+    assert _format_age(dt) == "15m ago"
+
+
+def test_format_age_hours() -> None:
+    dt = datetime.now(timezone.utc) - timedelta(hours=5)
+    assert _format_age(dt) == "5h ago"
+
+
+def test_format_age_days() -> None:
+    dt = datetime.now(timezone.utc) - timedelta(days=3)
+    assert _format_age(dt) == "3d ago"
 
 
 # --- sync command ---

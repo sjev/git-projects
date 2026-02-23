@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import importlib.metadata
+import json
 import sys
+from datetime import datetime, timezone
 from typing import Annotated
 
 import httpx
@@ -168,6 +171,62 @@ def untrack(
         raise typer.Exit(code=1) from None
 
     print(f"Untracked {name}")
+
+
+def _format_age(dt: datetime) -> str:
+    """Format a datetime as a human-readable relative age string."""
+    delta = datetime.now(timezone.utc) - dt
+    seconds = int(delta.total_seconds())
+    if seconds < 60:
+        return "just now"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m ago"
+    hours = seconds // 3600
+    if hours < 48:
+        return f"{hours}h ago"
+    days = seconds // 86400
+    return f"{days}d ago"
+
+
+@app.command()
+def info() -> None:
+    """Show app version, config and index locations, and repo counts."""
+    try:
+        version = importlib.metadata.version("git-projects")
+    except importlib.metadata.PackageNotFoundError:
+        version = "unknown"
+
+    typer.echo(f"git-projects {typer.style(version, bold=True)}")
+    typer.echo()
+
+    # Config section
+    config_path = config.get_config_path()
+    if config_path.exists():
+        cfg = config.load_config()
+        n_tracked = len(cfg.projects)
+        typer.echo(f"Config    {typer.style(str(config_path), dim=True)}")
+        typer.echo(f"          {typer.style(f'{n_tracked} tracked projects', dim=True)}")
+    else:
+        typer.echo(
+            f"Config    {typer.style(str(config_path), dim=True)}  "
+            f"{typer.style('(not found)', dim=True)}"
+        )
+
+    # Index section
+    index_path = index.get_index_path()
+    if index_path.exists():
+        raw = json.loads(index_path.read_text())
+        n_repos = len(raw.get("repos", []))
+        updated_at = datetime.fromisoformat(raw["updated_at"])
+        age = _format_age(updated_at)
+        typer.echo(f"Index     {typer.style(str(index_path), dim=True)}")
+        typer.echo(f"          {typer.style(f'{n_repos} repos, updated {age}', dim=True)}")
+    else:
+        typer.echo(
+            f"Index     {typer.style(str(index_path), dim=True)}  "
+            f"{typer.style('(not found)', dim=True)}"
+        )
 
 
 @app.command(name="list")
