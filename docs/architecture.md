@@ -12,7 +12,7 @@ A developer working across multiple git foundries (GitHub, GitLab, self-hosted G
 2. Let the user explicitly select which repos to track via config.
 3. Clone and sync tracked repos locally at a configured base path.
 4. Provide project list and history views from local git log.
-5. Single config file (`config.yaml`) under `XDG_DATA_HOME/git-projects/` — no separate registry.
+5. Config file (`config.yaml`) and local index (`index.json`) under `XDG_DATA_HOME/git-projects/`.
 
 ### Non-goals
 
@@ -24,16 +24,18 @@ A developer working across multiple git foundries (GitHub, GitLab, self-hosted G
 
 ## System overview
 
-The tool is a local CLI application. `fetch` calls foundry APIs and prints available repos (ephemeral, not persisted). `track`/`untrack` manage which repos the user cares about in `config.yaml`. `sync` clones missing and pulls existing tracked repos. `list` and `history` read from local state and git repos to produce terminal output.
+The tool is a local CLI application. `remote fetch` calls foundry APIs concurrently, saves results to a local index (`index.json`), and prints a summary. `remote list` reads the index and filters by query/recency — no network required. `track` accepts a repo name (looked up from the index) or a direct clone URL. `sync` clones missing and pulls existing tracked repos. `list` and `history` read from local state and git repos.
 
 ```mermaid
 graph LR
     CLI[CLI - typer]
     CLI --> Config[Config Module]
+    CLI --> Index[Index Module]
     CLI --> GitOps[Git Operations]
     CLI --> History[History Builder]
 
     Config -- reads/writes --> YAML[(config.yaml<br>XDG_DATA_HOME)]
+    Index -- reads/writes --> JSON[(index.json<br>XDG_DATA_HOME)]
     GitOps -- clone/pull/log --> LocalRepos[(Local repos on disk)]
     History -- reads --> LocalRepos
     History -- reads --> Config
@@ -62,8 +64,9 @@ graph LR
 |---|---|
 | `config init` | Create default config file |
 | `config show` | Show config file path and contents |
-| `fetch [foundry]` | Fetch and print available repos from foundry APIs (not persisted) |
-| `track <clone_url> [--path <dir>]` | Add a project to config.yaml (auto-derives name and path; `--path` overrides) |
+| `remote fetch [foundry]` | Fetch repos from foundry APIs concurrently, save to local index |
+| `remote list [query] [--all]` | Show repos from local index; optional name/description filter; `--all` disables 180-day cutoff |
+| `track <name\|url> [--path <dir>]` | Add a project — name looked up in index, or direct clone URL |
 | `untrack <name>` | Remove a project from config.yaml |
 | `list` | Show tracked projects |
 | `sync` | Clone missing repos, pull existing tracked repos |
@@ -72,19 +75,20 @@ graph LR
 ### Workflow
 
 ```
-fetch               → see what repos exist on your foundries
-track <clone_url>   → add a repo to your tracked projects
-sync                → clone & pull all tracked projects
-list                → see what you're tracking
-history [name]      → see recent git activity
-untrack <name>      → stop tracking a project
+remote fetch            → hit APIs, save all repos to local index
+remote list [query]     → browse index (fast, no network)
+track <name>            → add by name from index
+sync                    → clone & pull all tracked projects
+list                    → see what you're tracking
+history [name]          → see recent git activity
+untrack <name>          → stop tracking a project
 ```
 
 ## Module boundaries
 
 ### `cli` — Command-line interface
 - **Owns**: Argument parsing, output formatting, subcommand dispatch.
-- **Public interface**: `app` (typer instance) with commands: `config` (group: `init`, `show`), `fetch`, `track`, `untrack`, `list`, `sync`, `history`.
+- **Public interface**: `app` (typer instance) with commands: `config` (group: `init`, `show`), `remote` (group: `fetch`, `list`), `track`, `untrack`, `list`, `sync`, `history`.
 - **Must NOT**: Contain business logic, call git directly, or manage state.
 
 ### `config` — Configuration and project tracking
@@ -98,7 +102,8 @@ untrack <name>      → stop tracking a project
 - **Storage layout**:
   ```
   $XDG_DATA_HOME/git-projects/
-  └── config.yaml      # foundries, clone root, tracked projects
+  ├── config.yaml      # foundries, clone root, tracked projects
+  └── index.json       # cached repo list from last remote fetch
   ```
 - **Default config.yaml created by `init`**:
   ```yaml
@@ -134,7 +139,13 @@ untrack <name>      → stop tracking a project
       name: repo-b
       path: ~/projects/repo-b
   ```
-- **Path derivation**: When `track` is called with a clone URL, `name` is extracted from the URL (last path segment without `.git`), and `path` is derived as `{clone_root}/{name}`. Both HTTPS (`https://host/user/repo.git`) and SCP-style SSH (`git@host:user/repo.git`) URLs are supported. Pass `--path <dir>` to override the local path entirely.
+- **Path derivation**: When `track` is called with a clone URL, `name` is extracted from the URL (last path segment without `.git`), and `path` is derived as `{clone_root}/{name}`. Both HTTPS (`https://host/user/repo.git`) and SCP-style SSH (`git@host:user/repo.git`) URLs are supported. Pass `--path <dir>` to override the local path entirely. When called with a name (no `://` or `git@`), the clone URL is resolved from the local index.
+
+### `index` — Local repo index
+- **Owns**: Reading/writing `index.json`, filtering and sorting cached repo metadata.
+- **Public interface**: `save_index(repos: list[RemoteRepo]) -> Path`, `load_index() -> list[RemoteRepo]`, `search_index(repos, query, max_age_days) -> list[RemoteRepo]`.
+- **Storage**: `$XDG_DATA_HOME/git-projects/index.json` — JSON array of all repos from the last `remote fetch`.
+- **Must NOT**: Call APIs, modify config, or run git commands.
 
 ### `foundry` — API clients for repo discovery
 - **Owns**: Listing repos from GitHub, GitLab, Gitea APIs. Returns normalized repo metadata.
@@ -158,18 +169,19 @@ untrack <name>      → stop tracking a project
 All communication is **synchronous function calls**. No events, no message queues. The CLI orchestrates:
 1. `config init`: config (create default config, print path)
 2. `config show`: config (load config, print path + content)
-3. `fetch`: foundry (list repos, print to terminal — nothing persisted)
-4. `track`: config (add project to config.yaml)
-5. `untrack`: config (remove project from config.yaml)
-6. `list`: config (load projects, print)
-7. `sync`: config (load projects) → gitops (clone missing, pull existing)
-8. `history`: config (load projects) → gitops (log) → history (format)
+3. `remote fetch`: foundry (concurrent API calls) → index (save all repos) → print summary
+4. `remote list`: index (load + filter) → print repos
+5. `track`: index (name lookup, optional) → config (add project to config.yaml)
+6. `untrack`: config (remove project from config.yaml)
+7. `list`: config (load projects, print)
+8. `sync`: config (load projects) → gitops (clone missing, pull existing)
+9. `history`: config (load projects) → gitops (log) → history (format)
 
 ## Key architectural decisions
 
-### Decision: Single config file, no registry
-- **Alternatives considered**: Separate registry.yaml for discovered repos, per-foundry registry files, tracked flag per repo in registry.
-- **Rationale**: The registry was caching API data that can be re-fetched on demand. It grew bloated with hundreds of repos the user didn't care about. A single config file with an explicit `projects` list keeps user intent and configuration in one place. The API is the source of truth for discovery; config is the source of truth for tracking.
+### Decision: Separate index.json from config.yaml
+- **Alternatives considered**: Single config file with tracked+discovered repos, per-foundry cache files.
+- **Rationale**: `config.yaml` captures user intent (what to track) and is hand-editable. `index.json` is a machine-managed cache of API data — mixing them would make the config file grow with hundreds of repos the user doesn't care about. Separating them keeps config stable and human-readable while the index can be freely overwritten by `remote fetch`.
 
 ### Decision: Shell out to `git` instead of using GitPython/pygit2
 - **Alternatives considered**: GitPython, pygit2, dulwich.
