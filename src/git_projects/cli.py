@@ -4,6 +4,7 @@ import importlib.metadata
 import json
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Annotated
 
 import httpx
@@ -203,15 +204,19 @@ def info() -> None:
     # Config section
     config_path = config.get_config_path()
     if config_path.exists():
-        cfg = config.load_config()
-        n_tracked = len(cfg.projects)
         typer.echo(f"Config    {typer.style(str(config_path), dim=True)}")
-        typer.echo(f"          {typer.style(f'{n_tracked} tracked projects', dim=True)}")
     else:
         typer.echo(
             f"Config    {typer.style(str(config_path), dim=True)}  "
             f"{typer.style('(not found)', dim=True)}"
         )
+
+    # Projects section
+    projects_path = config.get_projects_path()
+    n_tracked = len(config.load_projects())
+    if config_path.exists():
+        typer.echo(f"Projects  {typer.style(str(projects_path), dim=True)}")
+        typer.echo(f"          {typer.style(f'{n_tracked} tracked projects', dim=True)}")
 
     # Index section
     index_path = index.get_index_path()
@@ -233,23 +238,33 @@ def info() -> None:
 def list_projects() -> None:
     """Show tracked projects."""
     cfg = _load_config_or_exit()
+    projects = config.load_projects()
 
-    if not cfg.projects:
+    if not projects:
         print("No projects tracked. Use 'git-projects track <name>' to add one.")
         return
 
-    for project in cfg.projects:
-        print(f"{project.name}  {project.path}")
+    clone_root = str(Path(cfg.clone_root).expanduser())
+    for project in projects:
+        abs_path = str(Path(clone_root) / project.path)
+        print(f"{project.name}  {abs_path}")
 
 
 @app.command()
 def sync() -> None:
     """Clone missing repos and pull existing tracked repos."""
     cfg = _load_config_or_exit()
+    projects = config.load_projects()
 
-    if not cfg.projects:
+    if not projects:
         print("No projects tracked. Use 'git-projects track <name>' to add one.")
         return
+
+    clone_root = Path(cfg.clone_root).expanduser()
+    resolved = [
+        config.Project(clone_url=p.clone_url, name=p.name, path=str(clone_root / p.path))
+        for p in projects
+    ]
 
     _STATUS_COLOR = {
         "cloned": "cyan",
@@ -262,7 +277,7 @@ def sync() -> None:
         label = typer.style(status, fg=color)
         print(f"  {name}  {label}")
 
-    result = sync_projects(cfg.projects, on_project=_on_project)
+    result = sync_projects(resolved, on_project=_on_project)
 
     summary = (
         f"{len(result.cloned) + len(result.synced)} synced, "

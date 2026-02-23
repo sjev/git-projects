@@ -284,10 +284,10 @@ def test_remote_list_no_results_for_query() -> None:
 
 
 def test_track_adds_project_by_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = tmp_path / "config.yaml"
-    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+    projects_path = tmp_path / "projects.json"
+    monkeypatch.setattr("git_projects.config.get_projects_path", lambda: projects_path)
 
-    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY], projects=[])
+    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
     with patch("git_projects.cli.config.load_config", return_value=cfg):
         result = runner.invoke(app, ["track", "https://github.com/user/repo-a.git"])
@@ -298,10 +298,10 @@ def test_track_adds_project_by_url(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
 
 def test_track_ssh_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = tmp_path / "config.yaml"
-    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+    projects_path = tmp_path / "projects.json"
+    monkeypatch.setattr("git_projects.config.get_projects_path", lambda: projects_path)
 
-    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+    cfg = Config(clone_root="~/projects", foundries=[])
 
     with patch("git_projects.cli.config.load_config", return_value=cfg):
         result = runner.invoke(app, ["track", "git@github.com:user/repo-a.git"])
@@ -312,10 +312,10 @@ def test_track_ssh_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_track_by_name_from_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = tmp_path / "config.yaml"
-    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+    projects_path = tmp_path / "projects.json"
+    monkeypatch.setattr("git_projects.config.get_projects_path", lambda: projects_path)
 
-    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+    cfg = Config(clone_root="~/projects", foundries=[])
 
     with (
         patch("git_projects.cli.config.load_config", return_value=cfg),
@@ -328,7 +328,7 @@ def test_track_by_name_from_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
 
 def test_track_by_name_empty_index() -> None:
-    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+    cfg = Config(clone_root="~/projects", foundries=[])
 
     with (
         patch("git_projects.cli.config.load_config", return_value=cfg),
@@ -341,19 +341,16 @@ def test_track_by_name_empty_index() -> None:
 
 
 def test_track_duplicate_rejected() -> None:
-    cfg = Config(
-        clone_root="~/projects",
-        foundries=[],
-        projects=[
-            Project(
-                clone_url="https://github.com/user/repo-a.git",
-                name="repo-a",
-                path="~/projects/repo-a",
-            )
-        ],
-    )
+    """AC-08: duplicate rejected via load_projects check."""
+    cfg = Config(clone_root="~/projects", foundries=[])
+    existing = [
+        Project(clone_url="https://github.com/user/repo-a.git", name="repo-a", path="repo-a")
+    ]
 
-    with patch("git_projects.cli.config.load_config", return_value=cfg):
+    with (
+        patch("git_projects.cli.config.load_config", return_value=cfg),
+        patch("git_projects.services.config.load_projects", return_value=existing),
+    ):
         result = runner.invoke(app, ["track", "https://github.com/user/repo-a.git"])
 
     assert result.exit_code == 1
@@ -364,22 +361,20 @@ def test_track_duplicate_rejected() -> None:
 
 
 def test_untrack_removes_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = tmp_path / "config.yaml"
-    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+    """AC-09: untrack removes project from projects.json."""
+    projects_path = tmp_path / "projects.json"
+    monkeypatch.setattr("git_projects.config.get_projects_path", lambda: projects_path)
 
-    cfg = Config(
-        clone_root="~/projects",
-        foundries=[],
-        projects=[
-            Project(
-                clone_url="https://github.com/user/repo-a.git",
-                name="repo-a",
-                path="~/projects/repo-a",
-            )
-        ],
-    )
+    existing = [
+        Project(clone_url="https://github.com/user/repo-a.git", name="repo-a", path="repo-a")
+    ]
+    cfg = Config(clone_root="~/projects", foundries=[])
 
-    with patch("git_projects.cli.config.load_config", return_value=cfg):
+    with (
+        patch("git_projects.cli.config.load_config", return_value=cfg),
+        patch("git_projects.services.config.load_projects", return_value=existing),
+        patch("git_projects.services.config.save_projects"),
+    ):
         result = runner.invoke(app, ["untrack", "repo-a"])
 
     assert result.exit_code == 0
@@ -387,9 +382,12 @@ def test_untrack_removes_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
 
 def test_untrack_unknown_project() -> None:
-    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+    cfg = Config(clone_root="~/projects", foundries=[])
 
-    with patch("git_projects.cli.config.load_config", return_value=cfg):
+    with (
+        patch("git_projects.cli.config.load_config", return_value=cfg),
+        patch("git_projects.services.config.load_projects", return_value=[]),
+    ):
         result = runner.invoke(app, ["untrack", "nonexistent"])
 
     assert result.exit_code == 1
@@ -400,45 +398,45 @@ def test_untrack_unknown_project() -> None:
 
 
 def test_list_shows_projects() -> None:
-    cfg = Config(
-        clone_root="~/projects",
-        foundries=[],
-        projects=[
-            Project(
-                clone_url="https://github.com/user/repo-a.git",
-                name="repo-a",
-                path="~/projects/repo-a",
-            )
-        ],
-    )
+    """AC-10: list reads from load_projects and resolves absolute paths."""
+    cfg = Config(clone_root="~/projects", foundries=[])
+    projects = [
+        Project(clone_url="https://github.com/user/repo-a.git", name="repo-a", path="repo-a")
+    ]
 
-    with patch("git_projects.cli.config.load_config", return_value=cfg):
+    with (
+        patch("git_projects.cli.config.load_config", return_value=cfg),
+        patch("git_projects.cli.config.load_projects", return_value=projects),
+    ):
         result = runner.invoke(app, ["list"])
 
     assert result.exit_code == 0
     assert "repo-a" in result.output
-    assert "~/projects/repo-a" in result.output
+    # path resolved to clone_root / path
+    assert "projects/repo-a" in result.output
 
 
 def test_list_empty() -> None:
-    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+    cfg = Config(clone_root="~/projects", foundries=[])
 
-    with patch("git_projects.cli.config.load_config", return_value=cfg):
+    with (
+        patch("git_projects.cli.config.load_config", return_value=cfg),
+        patch("git_projects.cli.config.load_projects", return_value=[]),
+    ):
         result = runner.invoke(app, ["list"])
 
     assert result.exit_code == 0
     assert "No projects tracked" in result.output
 
 
-# --- sync command ---
-
 # --- info ---
 
 
 def test_info_both_files_exist(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """AC-01, AC-02, AC-03, AC-04, AC-05, AC-07, AC-08."""
+    """AC-12: info shows projects.json path and tracked project count."""
     config_path = tmp_path / "git-projects" / "config.yaml"
     index_path = tmp_path / "git-projects" / "index.json"
+    projects_path = tmp_path / "git-projects" / "projects.json"
     config_path.parent.mkdir(parents=True)
     config_path.write_text(DEFAULT_CONFIG)
 
@@ -447,6 +445,7 @@ def test_info_both_files_exist(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     index_path.write_text(json.dumps(index_data))
 
     monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+    monkeypatch.setattr("git_projects.config.get_projects_path", lambda: projects_path)
     monkeypatch.setattr("git_projects.index.get_index_path", lambda: index_path)
 
     result = runner.invoke(app, ["info"])
@@ -454,6 +453,7 @@ def test_info_both_files_exist(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert result.exit_code == 0
     assert "git-projects" in result.output
     assert str(config_path) in result.output
+    assert str(projects_path) in result.output
     assert str(index_path) in result.output
     assert "0 tracked projects" in result.output
     assert "2 repos" in result.output
@@ -461,9 +461,9 @@ def test_info_both_files_exist(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_info_config_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """AC-01, AC-03, AC-06."""
     config_path = tmp_path / "git-projects" / "config.yaml"
     index_path = tmp_path / "git-projects" / "index.json"
+    projects_path = tmp_path / "git-projects" / "projects.json"
     config_path.parent.mkdir(parents=True)
 
     updated = datetime.now(timezone.utc).isoformat()
@@ -471,6 +471,7 @@ def test_info_config_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     index_path.write_text(json.dumps(index_data))
 
     monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+    monkeypatch.setattr("git_projects.config.get_projects_path", lambda: projects_path)
     monkeypatch.setattr("git_projects.index.get_index_path", lambda: index_path)
 
     result = runner.invoke(app, ["info"])
@@ -482,13 +483,14 @@ def test_info_config_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_info_index_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """AC-01, AC-04, AC-09."""
     config_path = tmp_path / "git-projects" / "config.yaml"
     index_path = tmp_path / "git-projects" / "index.json"
+    projects_path = tmp_path / "git-projects" / "projects.json"
     config_path.parent.mkdir(parents=True)
     config_path.write_text(DEFAULT_CONFIG)
 
     monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+    monkeypatch.setattr("git_projects.config.get_projects_path", lambda: projects_path)
     monkeypatch.setattr("git_projects.index.get_index_path", lambda: index_path)
 
     result = runner.invoke(app, ["info"])
@@ -500,11 +502,12 @@ def test_info_index_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_info_both_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """AC-01, AC-06, AC-09."""
     config_path = tmp_path / "git-projects" / "config.yaml"
     index_path = tmp_path / "git-projects" / "index.json"
+    projects_path = tmp_path / "git-projects" / "projects.json"
 
     monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+    monkeypatch.setattr("git_projects.config.get_projects_path", lambda: projects_path)
     monkeypatch.setattr("git_projects.index.get_index_path", lambda: index_path)
 
     result = runner.invoke(app, ["info"])
@@ -517,7 +520,7 @@ def test_info_both_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_info_version_fallback() -> None:
-    """AC-02 — PackageNotFoundError falls back to 'unknown'."""
+    """PackageNotFoundError falls back to 'unknown'."""
     from importlib.metadata import PackageNotFoundError
 
     with patch("git_projects.cli.importlib.metadata.version", side_effect=PackageNotFoundError):
@@ -553,39 +556,46 @@ from git_projects.services import SyncResult  # noqa: E402
 
 
 def _sync_cfg() -> Config:
-    return Config(
-        clone_root="~/projects",
-        foundries=[],
-        projects=[
-            Project(clone_url="https://github.com/u/a.git", name="a", path="~/projects/a"),
-            Project(clone_url="https://github.com/u/b.git", name="b", path="~/projects/b"),
-        ],
-    )
+    return Config(clone_root="~/projects", foundries=[])
+
+
+_SYNC_PROJECTS = [
+    Project(clone_url="https://github.com/u/a.git", name="a", path="a"),
+    Project(clone_url="https://github.com/u/b.git", name="b", path="b"),
+]
 
 
 def test_sync_no_projects() -> None:
-    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+    """AC-11: sync reads from load_projects."""
+    cfg = Config(clone_root="~/projects", foundries=[])
 
-    with patch("git_projects.cli.config.load_config", return_value=cfg):
+    with (
+        patch("git_projects.cli.config.load_config", return_value=cfg),
+        patch("git_projects.cli.config.load_projects", return_value=[]),
+    ):
         result = runner.invoke(app, ["sync"])
 
     assert result.exit_code == 0
     assert "No projects tracked" in result.output
 
 
-def test_sync_calls_sync_projects_with_projects() -> None:
+def test_sync_calls_sync_projects_with_resolved_paths() -> None:
+    """AC-11: sync resolves clone_root / project.path before calling sync_projects."""
     sync_result = SyncResult(cloned=[], synced=["a", "b"], skipped=[], errored=[])
 
     with (
         patch("git_projects.cli.config.load_config", return_value=_sync_cfg()),
+        patch("git_projects.cli.config.load_projects", return_value=_SYNC_PROJECTS),
         patch("git_projects.cli.sync_projects", return_value=sync_result) as mock_sync,
     ):
         result = runner.invoke(app, ["sync"])
 
     assert result.exit_code == 0
     mock_sync.assert_called_once()
-    _, kwargs = mock_sync.call_args
-    assert kwargs.get("on_project") is not None or mock_sync.call_args[0]
+    passed_projects = mock_sync.call_args[0][0]
+    # paths must be absolute (resolved)
+    assert all(Path(p.path).is_absolute() for p in passed_projects)
+    assert all(p.path.endswith(p.name) for p in passed_projects)
 
 
 def test_sync_prints_summary_line() -> None:
@@ -593,6 +603,7 @@ def test_sync_prints_summary_line() -> None:
 
     with (
         patch("git_projects.cli.config.load_config", return_value=_sync_cfg()),
+        patch("git_projects.cli.config.load_projects", return_value=_SYNC_PROJECTS),
         patch("git_projects.cli.sync_projects", return_value=sync_result),
     ):
         result = runner.invoke(app, ["sync"])
@@ -612,6 +623,7 @@ def test_sync_on_project_callback_is_called() -> None:
 
     with (
         patch("git_projects.cli.config.load_config", return_value=_sync_cfg()),
+        patch("git_projects.cli.config.load_projects", return_value=_SYNC_PROJECTS),
         patch("git_projects.cli.sync_projects", side_effect=fake_sync),
     ):
         result = runner.invoke(app, ["sync"])

@@ -121,64 +121,70 @@ def test_fetch_repos_missing_token() -> None:
 # --- track_project (URL) ---
 
 
-def test_track_project_by_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = tmp_path / "config.yaml"
-    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+def test_track_project_by_url() -> None:
+    """AC-08: track saves new project to projects.json."""
+    cfg = Config(clone_root="~/projects", foundries=[])
 
-    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
-    project = track_project(cfg, "https://github.com/user/repo-a.git")
+    with (
+        patch("git_projects.services.config.load_projects", return_value=[]) as mock_load,
+        patch("git_projects.services.config.save_projects") as mock_save,
+    ):
+        project = track_project(cfg, "https://github.com/user/repo-a.git")
 
     assert project.name == "repo-a"
-    assert len(cfg.projects) == 1
+    assert project.path == "repo-a"
+    mock_load.assert_called_once()
+    mock_save.assert_called_once_with([project])
 
 
 def test_track_project_duplicate() -> None:
-    cfg = Config(
-        clone_root="~/projects",
-        foundries=[],
-        projects=[
-            Project(
-                clone_url="https://github.com/user/repo-a.git",
-                name="repo-a",
-                path="~/projects/repo-a",
-            )
-        ],
+    """AC-08: duplicate clone_url raises ValueError."""
+    cfg = Config(clone_root="~/projects", foundries=[])
+    existing = Project(
+        clone_url="https://github.com/user/repo-a.git",
+        name="repo-a",
+        path="repo-a",
     )
 
-    with pytest.raises(ValueError, match="Already tracking"):
+    with (
+        patch("git_projects.services.config.load_projects", return_value=[existing]),
+        pytest.raises(ValueError, match="Already tracking"),
+    ):
         track_project(cfg, "https://github.com/user/repo-a.git")
 
 
 # --- track_project (name lookup) ---
 
 
-def test_track_project_by_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = tmp_path / "config.yaml"
-    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+def test_track_project_by_name() -> None:
+    cfg = Config(clone_root="~/projects", foundries=[])
 
-    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
-
-    with patch("git_projects.services.index.load_index", return_value=_REMOTE_REPOS):
+    with (
+        patch("git_projects.services.index.load_index", return_value=_REMOTE_REPOS),
+        patch("git_projects.services.config.load_projects", return_value=[]),
+        patch("git_projects.services.config.save_projects"),
+    ):
         project = track_project(cfg, "proj-a")
 
     assert project.name == "proj-a"
     assert project.clone_url == "git@github.com:user/proj-a.git"
 
 
-def test_track_project_by_partial_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = tmp_path / "config.yaml"
-    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
+def test_track_project_by_partial_name() -> None:
+    cfg = Config(clone_root="~/projects", foundries=[])
 
-    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
-
-    with patch("git_projects.services.index.load_index", return_value=_REMOTE_REPOS):
+    with (
+        patch("git_projects.services.index.load_index", return_value=_REMOTE_REPOS),
+        patch("git_projects.services.config.load_projects", return_value=[]),
+        patch("git_projects.services.config.save_projects"),
+    ):
         project = track_project(cfg, "proj-a")
 
     assert project.name == "proj-a"
 
 
 def test_track_project_name_empty_index() -> None:
-    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+    cfg = Config(clone_root="~/projects", foundries=[])
 
     with (
         patch("git_projects.services.index.load_index", return_value=[]),
@@ -188,7 +194,7 @@ def test_track_project_name_empty_index() -> None:
 
 
 def test_track_project_name_not_found() -> None:
-    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+    cfg = Config(clone_root="~/projects", foundries=[])
 
     with (
         patch("git_projects.services.index.load_index", return_value=_REMOTE_REPOS),
@@ -198,7 +204,7 @@ def test_track_project_name_not_found() -> None:
 
 
 def test_track_project_name_ambiguous() -> None:
-    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+    cfg = Config(clone_root="~/projects", foundries=[])
 
     with (
         patch("git_projects.services.index.load_index", return_value=_REMOTE_REPOS),
@@ -211,30 +217,31 @@ def test_track_project_name_ambiguous() -> None:
 # --- untrack_project ---
 
 
-def test_untrack_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    config_path = tmp_path / "config.yaml"
-    monkeypatch.setattr("git_projects.config.get_config_path", lambda: config_path)
-
-    cfg = Config(
-        clone_root="~/projects",
-        foundries=[],
-        projects=[
-            Project(
-                clone_url="https://github.com/user/repo-a.git",
-                name="repo-a",
-                path="~/projects/repo-a",
-            )
-        ],
+def test_untrack_project() -> None:
+    """AC-09: untrack removes the named project and saves projects.json."""
+    cfg = Config(clone_root="~/projects", foundries=[])
+    existing = Project(
+        clone_url="https://github.com/user/repo-a.git",
+        name="repo-a",
+        path="repo-a",
     )
 
-    untrack_project(cfg, "repo-a")
-    assert len(cfg.projects) == 0
+    with (
+        patch("git_projects.services.config.load_projects", return_value=[existing]),
+        patch("git_projects.services.config.save_projects") as mock_save,
+    ):
+        untrack_project(cfg, "repo-a")
+
+    mock_save.assert_called_once_with([])
 
 
 def test_untrack_project_not_found() -> None:
-    cfg = Config(clone_root="~/projects", foundries=[], projects=[])
+    cfg = Config(clone_root="~/projects", foundries=[])
 
-    with pytest.raises(ValueError, match="nonexistent"):
+    with (
+        patch("git_projects.services.config.load_projects", return_value=[]),
+        pytest.raises(ValueError, match="nonexistent"),
+    ):
         untrack_project(cfg, "nonexistent")
 
 

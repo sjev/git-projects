@@ -90,30 +90,29 @@ def track_project(cfg: Config, name_or_url: str, path: str | None = None) -> Pro
                     " Run 'git-projects remote list' to browse."
                 )
 
-    if any(p.clone_url == clone_url for p in cfg.projects):
+    projects = config.load_projects()
+    if any(p.clone_url == clone_url for p in projects):
         raise ValueError(f"Already tracking: {clone_url}")
 
     if path is not None:
         parsed_name = clone_url.rstrip("/").removesuffix(".git").rsplit("/", 1)[-1]
         project = Project(clone_url=clone_url, name=parsed_name, path=path)
     else:
-        project = config.derive_project(clone_url, cfg.clone_root)
-    cfg.projects.append(project)
-    config.save_config(cfg)
+        project = config.derive_project(clone_url)
+    config.save_projects([*projects, project])
     return project
 
 
 def untrack_project(cfg: Config, name: str) -> None:
-    """Remove a project from tracking and save config.
+    """Remove a project from tracking and save projects.json.
 
     Raises ValueError if not found.
     """
-    before = len(cfg.projects)
-    cfg.projects = [p for p in cfg.projects if p.name != name]
-    if len(cfg.projects) == before:
+    projects = config.load_projects()
+    filtered = [p for p in projects if p.name != name]
+    if len(filtered) == len(projects):
         raise ValueError(f"No project named '{name}' found.")
-
-    config.save_config(cfg)
+    config.save_projects(filtered)
 
 
 @dataclass

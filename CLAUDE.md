@@ -61,4 +61,4 @@ Storage at `$XDG_DATA_HOME/git-projects/`:
 - `sync` command — needs a `gitops` module for clone/pull operations
 - `history` command — declared but not implemented
 - `export` / `import` commands — not yet implemented
-- **Migration**: existing `config.yaml` with `projects: []` needs migration to split `projects.json`
+
