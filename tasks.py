@@ -34,3 +34,9 @@ def clean(c):
     c.run("git clean -nfdx")
     if input("Delete? [y/N] ").lower() == "y":
         c.run("git clean -fdx")
+
+
+@task(help={"part": "Version part to bump: major, minor, or patch"})
+def bump(c, part="patch"):
+    """Bump project version."""
+    c.run(f"uv run bump-my-version bump {part}")

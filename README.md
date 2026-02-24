@@ -113,6 +113,18 @@ uv run invoke test      # pytest with coverage
 uv run invoke format    # ruff format
 ```
 
+### Versioning
+
+Bump the version with [bump-my-version](https://github.com/callowayproject/bump-my-version):
+
+```bash
+uv run invoke bump           # patch: 0.1.0 → 0.1.1
+uv run invoke bump --part minor  # minor: 0.1.0 → 0.2.0
+uv run invoke bump --part major  # major: 0.1.0 → 1.0.0
+```
+
+Each bump updates `pyproject.toml`, creates a git commit, and tags the release.
+
 ## License
 
 MIT
