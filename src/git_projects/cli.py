@@ -251,7 +251,12 @@ def list_projects() -> None:
 
 
 @app.command()
-def sync() -> None:
+def sync(
+    workers: Annotated[
+        int,
+        typer.Option("--workers", "-w", help="Number of parallel workers.", min=1),
+    ] = 4,
+) -> None:
     """Clone missing repos and pull existing tracked repos."""
     cfg = _load_config_or_exit()
     projects = config.load_projects()
@@ -277,7 +282,7 @@ def sync() -> None:
         label = typer.style(status, fg=color)
         print(f"  {name}  {label}")
 
-    result = sync_projects(resolved, on_project=_on_project)
+    result = sync_projects(resolved, on_project=_on_project, max_workers=workers)
 
     summary = (
         f"{len(result.cloned) + len(result.synced)} synced, "

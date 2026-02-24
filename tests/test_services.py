@@ -379,3 +379,41 @@ def test_sync_calls_on_project_callback(tmp_path: Path) -> None:
         sync_projects([project], on_project=lambda n, s: calls.append((n, s)))
 
     assert calls == [("a", "synced")]
+
+
+def test_sync_parallel_processes_all_projects(tmp_path: Path) -> None:
+    """All projects are processed when using multiple workers."""
+    repos = []
+    projects = []
+    for name in ("a", "b", "c", "d"):
+        repo = tmp_path / name
+        repo.mkdir()
+        projects.append(
+            Project(clone_url=f"https://github.com/u/{name}.git", name=name, path=str(repo))
+        )
+        repos.append(repo)
+
+    with (
+        patch("git_projects.services.is_dirty", return_value=False),
+        patch("git_projects.services.pull_repo"),
+        patch("git_projects.services.push_repo"),
+    ):
+        result = sync_projects(projects, max_workers=4)
+
+    assert sorted(result.synced) == ["a", "b", "c", "d"]
+
+
+def test_sync_max_workers_one_is_sequential(tmp_path: Path) -> None:
+    """max_workers=1 processes projects one at a time."""
+    repo = tmp_path / "a"
+    repo.mkdir()
+    project = Project(clone_url="https://github.com/u/a.git", name="a", path=str(repo))
+
+    with (
+        patch("git_projects.services.is_dirty", return_value=False),
+        patch("git_projects.services.pull_repo"),
+        patch("git_projects.services.push_repo"),
+    ):
+        result = sync_projects([project], max_workers=1)
+
+    assert result.synced == ["a"]

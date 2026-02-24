@@ -126,44 +126,56 @@ class SyncResult:
 def sync_projects(
     projects: list[Project],
     on_project: Callable[[str, str], None] | None = None,
+    max_workers: int = 4,
 ) -> SyncResult:
-    """Clone missing repos and pull+push existing ones.
+    """Clone missing repos and pull+push existing ones, in parallel.
 
     Calls on_project(name, status_message) for each project as it is processed.
     Dirty repos are skipped; git errors are recorded and processing continues.
     """
     result = SyncResult()
+    lock = threading.Lock()
 
-    for project in projects:
+    def _sync_one(project: Project) -> None:
         expanded = str(Path(project.path).expanduser())
 
         if not Path(expanded).exists():
             try:
                 clone_repo(project.clone_url, project.path)
-                result.cloned.append(project.name)
-                if on_project:
-                    on_project(project.name, "cloned")
+                with lock:
+                    result.cloned.append(project.name)
+                    if on_project:
+                        on_project(project.name, "cloned")
             except GitError as exc:
-                result.errored.append((project.name, str(exc)))
-                if on_project:
-                    on_project(project.name, f"error: {exc}")
-            continue
+                with lock:
+                    result.errored.append((project.name, str(exc)))
+                    if on_project:
+                        on_project(project.name, f"error: {exc}")
+            return
 
         if is_dirty(project.path):
-            result.skipped.append(project.name)
-            if on_project:
-                on_project(project.name, "skipped (dirty)")
-            continue
+            with lock:
+                result.skipped.append(project.name)
+                if on_project:
+                    on_project(project.name, "skipped (dirty)")
+            return
 
         try:
             pull_repo(project.path)
             push_repo(project.path)
-            result.synced.append(project.name)
-            if on_project:
-                on_project(project.name, "synced")
+            with lock:
+                result.synced.append(project.name)
+                if on_project:
+                    on_project(project.name, "synced")
         except GitError as exc:
-            result.errored.append((project.name, str(exc)))
-            if on_project:
-                on_project(project.name, f"error: {exc}")
+            with lock:
+                result.errored.append((project.name, str(exc)))
+                if on_project:
+                    on_project(project.name, f"error: {exc}")
+
+    with ThreadPoolExecutor(max_workers=max(1, max_workers)) as executor:
+        futures = [executor.submit(_sync_one, p) for p in projects]
+        for future in as_completed(futures):
+            future.result()
 
     return result
