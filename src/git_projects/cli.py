@@ -25,7 +25,7 @@ def _version_callback(value: bool) -> None:
     if value:
         from importlib.metadata import version
 
-        print(version("git-projects"))
+        print(version("git-proj"))
         raise typer.Exit()
 
 
@@ -33,7 +33,13 @@ def _version_callback(value: bool) -> None:
 def main(
     _version: Annotated[
         bool,
-        typer.Option("--version", "-v", help="Show version and exit.", callback=_version_callback),
+        typer.Option(
+            "--version",
+            "-v",
+            help="Show version and exit.",
+            callback=_version_callback,
+            is_eager=True,
+        ),
     ] = False,
 ) -> None:
     """Discover, track, and sync git repos across foundries."""
@@ -194,7 +200,7 @@ def _format_age(dt: datetime) -> str:
 def info() -> None:
     """Show app version, config and index locations, and repo counts."""
     try:
-        version = importlib.metadata.version("git-projects")
+        version = importlib.metadata.version("git-proj")
     except importlib.metadata.PackageNotFoundError:
         version = "unknown"
 
@@ -251,7 +257,12 @@ def list_projects() -> None:
 
 
 @app.command()
-def sync() -> None:
+def sync(
+    workers: Annotated[
+        int,
+        typer.Option("--workers", "-w", help="Number of parallel workers.", min=1),
+    ] = 4,
+) -> None:
     """Clone missing repos and pull existing tracked repos."""
     cfg = _load_config_or_exit()
     projects = config.load_projects()
@@ -277,7 +288,7 @@ def sync() -> None:
         label = typer.style(status, fg=color)
         print(f"  {name}  {label}")
 
-    result = sync_projects(resolved, on_project=_on_project)
+    result = sync_projects(resolved, on_project=_on_project, max_workers=workers)
 
     summary = (
         f"{len(result.cloned) + len(result.synced)} synced, "

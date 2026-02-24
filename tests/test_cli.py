@@ -596,6 +596,22 @@ def test_sync_calls_sync_projects_with_resolved_paths() -> None:
     # paths must be absolute (resolved)
     assert all(Path(p.path).is_absolute() for p in passed_projects)
     assert all(p.path.endswith(p.name) for p in passed_projects)
+    assert mock_sync.call_args[1]["max_workers"] == 4
+
+
+def test_sync_workers_flag() -> None:
+    """sync --workers N passes max_workers to sync_projects."""
+    sync_result = SyncResult(cloned=[], synced=["a"], skipped=[], errored=[])
+
+    with (
+        patch("git_projects.cli.config.load_config", return_value=_sync_cfg()),
+        patch("git_projects.cli.config.load_projects", return_value=_SYNC_PROJECTS),
+        patch("git_projects.cli.sync_projects", return_value=sync_result) as mock_sync,
+    ):
+        result = runner.invoke(app, ["sync", "--workers", "8"])
+
+    assert result.exit_code == 0
+    assert mock_sync.call_args[1]["max_workers"] == 8
 
 
 def test_sync_prints_summary_line() -> None:
@@ -615,7 +631,7 @@ def test_sync_prints_summary_line() -> None:
 
 
 def test_sync_on_project_callback_is_called() -> None:
-    def fake_sync(projects, on_project=None):
+    def fake_sync(projects, on_project=None, max_workers=4):
         if on_project:
             on_project("a", "synced")
             on_project("b", "skipped (dirty)")

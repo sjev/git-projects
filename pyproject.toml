@@ -1,6 +1,6 @@
 [project]
 name = "git-proj"
-version = "0.1.0"
+version = "0.2.0"
 description = "Discover, track, and sync Git repos across GitHub, GitLab, and Gitea"
 readme = "README.md"
 license = {text = "MIT"}
@@ -43,6 +43,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "bump-my-version>=0.31",
     "invoke>=2.2.0",
     "mypy>=1.10",
     "pytest>=8.0",
@@ -75,3 +76,13 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ARG001"]  # Allow unused arguments in tests
+
+[tool.bumpversion]
+current_version = "0.2.0"
+commit = true
+tag = true
+
+[[tool.bumpversion.files]]
+filename = "pyproject.toml"
+search = 'version = "{current_version}"'
+replace = 'version = "{new_version}"'
