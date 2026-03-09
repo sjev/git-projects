@@ -42,16 +42,21 @@ def format_repo(repo: RemoteRepo, width: int = 60, max_desc: int = 60) -> str:
     vis_label = f"[{repo.visibility}]"
     vis_color = typer.colors.RED if repo.visibility == "public" else typer.colors.GREEN
 
+    # Build display identifier: slug + original name in parens when they differ
+    show_original = repo.slug != repo.name.lower()
+    display = repo.slug + (f" ({repo.name})" if show_original else "")
+
     # Compute plain-text width for correct padding
-    plain_left = repo.name + " " + vis_label
+    plain_left = display + " " + vis_label
     padding = max(1, width - len(plain_left) - len(date))
 
-    name_styled = typer.style(repo.name, bold=True)
+    slug_styled = typer.style(repo.slug, bold=True)
+    name_suffix = typer.style(f" ({repo.name})", dim=True) if show_original else ""
     vis_styled = typer.style(vis_label, fg=vis_color)
     date_styled = typer.style(date, dim=True)
     repo_url_styled = typer.style(repo.repo_url, dim=True)
 
-    name_line = name_styled + " " + vis_styled + " " * padding + date_styled
+    name_line = slug_styled + name_suffix + " " + vis_styled + " " * padding + date_styled
     lines = [name_line, f"  {repo_url_styled}"]
     if repo.description:
         desc = repo.description

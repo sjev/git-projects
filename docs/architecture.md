@@ -64,7 +64,7 @@ graph LR
 | `config show` | Show config file path and contents |
 | `remote fetch [foundry]` | Fetch repos from foundry APIs concurrently, save to local index |
 | `remote list [query]` | Show repos from local index; optional name/description filter |
-| `track <name\|url> [--path <dir>]` | Add a project — name looked up in index, or direct clone URL |
+| `track <slug\|name\|url> [--path <dir>]` | Add a project — slug or name looked up in index, or direct clone URL |
 | `untrack <name>` | Remove a project from projects.json |
 | `list` | Show tracked projects |
 | `sync` | Clone missing repos, pull existing tracked repos |
@@ -133,7 +133,7 @@ untrack <name>          → stop tracking a project
     }
   ]
   ```
-- **Path derivation**: Project `path` is stored **relative to `clone_root`** (e.g. `"repo-a"`, not `"~/projects/repo-a"`). Resolved to an absolute path at runtime via `clone_root / path`. When `track` is called with a clone URL, `name` is extracted from the URL (last path segment without `.git`), and `path` defaults to `name`. Both HTTPS (`https://host/user/repo.git`) and SCP-style SSH (`git@host:user/repo.git`) URLs are supported. Pass `--path <dir>` to override the relative path. When called with a name (no `://` or `git@`), the clone URL is resolved from the local index.
+- **Path derivation**: Project `path` is stored **relative to `clone_root`** (e.g. `"repo-a"`, not `"~/projects/repo-a"`). Resolved to an absolute path at runtime via `clone_root / path`. When `track` is called with a clone URL, `name` is extracted from the URL (last path segment without `.git`), and `path` defaults to `name`. Both HTTPS (`https://host/user/repo.git`) and SCP-style SSH (`git@host:user/repo.git`) URLs are supported. Pass `--path <dir>` to override the relative path. When called with a name or slug (no `://` or `git@`), the clone URL is resolved from the local index. Matching tries exact name, exact slug, partial name, partial slug — in that order.
 
 ### `index` — Local repo index
 - **Owns**: Reading/writing `index.json`, filtering and sorting cached repo metadata.
@@ -145,7 +145,7 @@ untrack <name>          → stop tracking a project
 - **Owns**: Listing repos from GitHub, GitLab, Gitea APIs. Returns normalized repo metadata.
 - **Structure**: Package with one submodule per API type (`foundry/github.py`, `foundry/gitlab.py`, `foundry/gitea.py`). Each submodule exposes the same function signature.
 - **Public interface**: Each submodule exposes `list_repos(config: FoundryConfig, clone_url_format: str = "ssh") -> list[RemoteRepo]`.
-- **Shared types**: `RemoteRepo` dataclass defined in `foundry/__init__.py` — fields: `name`, `repo_url` (browser URL, always HTTPS), `clone_url` (HTTPS or SSH per `clone_url_format`), `pushed_at`, `default_branch`, `visibility`, `description`.
+- **Shared types**: `RemoteRepo` dataclass defined in `foundry/__init__.py` — fields: `name`, `repo_url` (browser URL, always HTTPS), `clone_url` (HTTPS or SSH per `clone_url_format`), `pushed_at`, `default_branch`, `visibility`, `description`. Computed property `slug` derives a URL-safe identifier from `name` (lowercase, non-alphanumeric runs → hyphens); used for CLI lookup and display when the name contains spaces or special characters.
 - **Must NOT**: Clone repos, modify config, or read git history.
 
 ### `gitops` — Local git operations
@@ -160,7 +160,7 @@ All communication is **synchronous function calls**. No events, no message queue
 2. `config show`: config (load config, print path + content)
 3. `remote fetch`: foundry (concurrent API calls) → index (save all repos) → print summary
 4. `remote list`: index (load + filter) → print repos
-5. `track`: index (name lookup, optional) → config (add project to projects.json)
+5. `track`: index (slug/name lookup, optional) → config (add project to projects.json)
 6. `untrack`: config (remove project from projects.json)
 7. `list`: config (load projects, print)
 8. `sync`: config (load projects) → gitops (clone missing, pull existing)
