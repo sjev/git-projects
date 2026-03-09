@@ -1,4 +1,6 @@
 # type: ignore
+import os
+
 from invoke import task
 
 
@@ -40,3 +42,16 @@ def clean(c):
 def bump(c, part="patch"):
     """Bump project version."""
     c.run(f"uv run bump-my-version bump {part}")
+
+@task
+def publish(c):
+    """Publish package to PyPI."""
+
+    # get token
+    token = os.getenv("PYPI_TOKEN")
+    if not token:
+        print("PYPI_TOKEN environment variable not set.")
+        return
+
+    c.run("uv build")
+    c.run(f"uv publish --token {token}")
