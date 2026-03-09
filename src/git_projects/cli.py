@@ -115,9 +115,6 @@ def remote_list(
     query: Annotated[
         str | None, typer.Argument(help="Filter by name or description substring.")
     ] = None,
-    show_all: Annotated[
-        bool, typer.Option("--all", help="Show all repos, not just recent ones.")
-    ] = False,
 ) -> None:
     """Show repos from local index."""
     repos = index.load_index()
@@ -126,8 +123,7 @@ def remote_list(
         print("Index is empty. Run 'git-projects remote fetch' first.")
         raise typer.Exit(code=1)
 
-    max_age = None if show_all else 180
-    repos = index.search_index(repos, query, max_age_days=max_age)
+    repos = index.search_index(repos, query, max_age_days=None)
 
     if not repos:
         hint = f" matching '{query}'" if query else ""

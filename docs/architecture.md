@@ -63,7 +63,7 @@ graph LR
 | `config init` | Create default config file |
 | `config show` | Show config file path and contents |
 | `remote fetch [foundry]` | Fetch repos from foundry APIs concurrently, save to local index |
-| `remote list [query] [--all]` | Show repos from local index; optional name/description filter; `--all` disables 180-day cutoff |
+| `remote list [query]` | Show repos from local index; optional name/description filter |
 | `track <name\|url> [--path <dir>]` | Add a project — name looked up in index, or direct clone URL |
 | `untrack <name>` | Remove a project from projects.json |
 | `list` | Show tracked projects |
