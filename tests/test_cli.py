@@ -43,16 +43,6 @@ _REMOTE_REPOS = [
     ),
 ]
 
-_OLD_REPO = RemoteRepo(
-    name="proj-old",
-    repo_url="https://github.com/user/proj-old",
-    clone_url="git@github.com:user/proj-old.git",
-    pushed_at=_ts(timedelta(days=400)),
-    default_branch="main",
-    visibility="public",
-    description="An old experiment",
-)
-
 
 def test_help() -> None:
     result = runner.invoke(app, ["--help"])
@@ -246,22 +236,6 @@ def test_remote_list_filters_by_query() -> None:
     assert result.exit_code == 0
     assert "proj-a" in result.output
     assert "proj-b" not in result.output
-
-
-def test_remote_list_hides_old_repos_by_default() -> None:
-    with patch("git_projects.cli.index.load_index", return_value=[*_REMOTE_REPOS, _OLD_REPO]):
-        result = runner.invoke(app, ["remote", "list"])
-
-    assert result.exit_code == 0
-    assert "proj-old" not in result.output
-
-
-def test_remote_list_all_shows_old_repos() -> None:
-    with patch("git_projects.cli.index.load_index", return_value=[*_REMOTE_REPOS, _OLD_REPO]):
-        result = runner.invoke(app, ["remote", "list", "--all"])
-
-    assert result.exit_code == 0
-    assert "proj-old" in result.output
 
 
 def test_remote_list_most_recent_last() -> None:

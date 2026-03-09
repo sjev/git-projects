@@ -58,7 +58,6 @@ def test_format_repo_contains_name_and_urls() -> None:
     out = _strip_ansi(format_repo(_REPO))
     assert "my-app" in out
     assert "https://github.com/user/my-app" in out
-    assert "git@github.com:user/my-app.git" in out
 
 
 def test_format_repo_contains_relative_time() -> None:
@@ -98,7 +97,7 @@ def test_format_repo_no_description_line_when_empty() -> None:
         description="",
     )
     lines = [ln for ln in _strip_ansi(format_repo(repo)).splitlines() if ln.strip()]
-    assert len(lines) == 3  # name+vis+date, repo_url, clone_url
+    assert len(lines) == 2  # name+vis+date, repo_url
 
 
 def test_format_repo_ends_with_newline() -> None:

@@ -71,18 +71,19 @@ def track_project(cfg: Config, name_or_url: str, path: str | None = None) -> Pro
         repos = index.load_index()
         if not repos:
             raise ValueError("Index is empty. Run 'git-projects remote fetch' first.")
-        exact = [r for r in repos if r.name == name_or_url]
+        exact = [r for r in repos if r.name == name_or_url or r.slug == name_or_url]
         if len(exact) == 1:
             clone_url = exact[0].clone_url
         elif len(exact) > 1:
             urls = ", ".join(r.clone_url for r in exact)
             raise ValueError(f"Ambiguous: '{name_or_url}' matches multiple repos: {urls}")
         else:
-            partial = [r for r in repos if name_or_url.lower() in r.name.lower()]
+            q = name_or_url.lower()
+            partial = [r for r in repos if q in r.name.lower() or q in r.slug]
             if len(partial) == 1:
                 clone_url = partial[0].clone_url
             elif len(partial) > 1:
-                names = ", ".join(r.name for r in partial)
+                names = ", ".join(r.slug for r in partial)
                 raise ValueError(f"Ambiguous: '{name_or_url}' matches: {names}. Be more specific.")
             else:
                 raise ValueError(

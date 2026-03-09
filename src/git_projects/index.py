@@ -67,7 +67,9 @@ def search_index(
     result = repos
     if query:
         q = query.lower()
-        result = [r for r in result if q in r.name.lower() or q in r.description.lower()]
+        result = [
+            r for r in result if q in r.name.lower() or q in r.slug or q in r.description.lower()
+        ]
     if max_age_days is not None:
         cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
         result = [
