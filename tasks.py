@@ -16,7 +16,7 @@ def format(c):
     c.run("uv run ruff format src tests")
 
 
-@task
+@task(pre=[format])
 def lint(c):
     """Run linters."""
     c.run("uv run ruff check src tests")
