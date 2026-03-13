@@ -126,10 +126,10 @@ def test_config_show_no_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert "config init" in result.output
 
 
-# --- remote fetch ---
+# --- fetch ---
 
 
-def test_remote_fetch_happy_path() -> None:
+def test_fetch_happy_path() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
     with (
@@ -137,13 +137,13 @@ def test_remote_fetch_happy_path() -> None:
         patch("git_projects.services.index.save_index"),
         patch("git_projects.cli.config.load_config", return_value=cfg),
     ):
-        result = runner.invoke(app, ["remote", "fetch"])
+        result = runner.invoke(app, ["fetch"])
 
     assert result.exit_code == 0
     assert "Fetched 2 repos from 1 foundries" in result.output
 
 
-def test_remote_fetch_by_foundry_name() -> None:
+def test_fetch_by_foundry_name() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
     with (
@@ -151,44 +151,44 @@ def test_remote_fetch_by_foundry_name() -> None:
         patch("git_projects.services.index.save_index"),
         patch("git_projects.cli.config.load_config", return_value=cfg),
     ):
-        result = runner.invoke(app, ["remote", "fetch", "github"])
+        result = runner.invoke(app, ["fetch", "github"])
 
     assert result.exit_code == 0
     assert "Fetched 2 repos" in result.output
 
 
-def test_remote_fetch_unknown_foundry() -> None:
+def test_fetch_unknown_foundry() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
     with patch("git_projects.cli.config.load_config", return_value=cfg):
-        result = runner.invoke(app, ["remote", "fetch", "nonexistent"])
+        result = runner.invoke(app, ["fetch", "nonexistent"])
 
     assert result.exit_code == 1
     assert "nonexistent" in result.output
 
 
-def test_remote_fetch_no_config() -> None:
+def test_fetch_no_config() -> None:
     with patch("git_projects.cli.config.load_config", side_effect=FileNotFoundError):
-        result = runner.invoke(app, ["remote", "fetch"])
+        result = runner.invoke(app, ["fetch"])
 
     assert result.exit_code == 1
     assert "config init" in result.output
 
 
-def test_remote_fetch_empty_token() -> None:
+def test_fetch_empty_token() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
     with (
         patch("git_projects.cli.config.load_config", return_value=cfg),
         patch("git_projects.services.github.list_repos", side_effect=ValueError("token")),
     ):
-        result = runner.invoke(app, ["remote", "fetch"])
+        result = runner.invoke(app, ["fetch"])
 
     assert result.exit_code == 1
     assert "token" in result.output.lower()
 
 
-def test_remote_fetch_auth_error() -> None:
+def test_fetch_auth_error() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
     request = httpx.Request("GET", "https://api.github.com/user/repos")
     response = httpx.Response(401)
@@ -201,26 +201,29 @@ def test_remote_fetch_auth_error() -> None:
             side_effect=httpx.HTTPStatusError("401", request=request, response=response),
         ),
     ):
-        result = runner.invoke(app, ["remote", "fetch"])
+        result = runner.invoke(app, ["fetch"])
 
     assert result.exit_code == 1
     assert "401" in result.output
 
 
-# --- remote list ---
+# --- list ---
 
 
-def test_remote_list_empty_index() -> None:
+def test_list_empty_index() -> None:
     with patch("git_projects.cli.index.load_index", return_value=[]):
-        result = runner.invoke(app, ["remote", "list"])
+        result = runner.invoke(app, ["list"])
 
     assert result.exit_code == 1
-    assert "remote fetch" in result.output
+    assert "fetch" in result.output
 
 
-def test_remote_list_shows_repos() -> None:
-    with patch("git_projects.cli.index.load_index", return_value=_REMOTE_REPOS):
-        result = runner.invoke(app, ["remote", "list"])
+def test_list_shows_repos() -> None:
+    with (
+        patch("git_projects.cli.index.load_index", return_value=_REMOTE_REPOS),
+        patch("git_projects.cli.config.load_config", side_effect=FileNotFoundError),
+    ):
+        result = runner.invoke(app, ["list"])
 
     assert result.exit_code == 0
     assert "proj-a" in result.output
@@ -229,29 +232,53 @@ def test_remote_list_shows_repos() -> None:
     assert "A project" in result.output
 
 
-def test_remote_list_filters_by_query() -> None:
-    with patch("git_projects.cli.index.load_index", return_value=_REMOTE_REPOS):
-        result = runner.invoke(app, ["remote", "list", "proj-a"])
+def test_list_filters_by_query() -> None:
+    with (
+        patch("git_projects.cli.index.load_index", return_value=_REMOTE_REPOS),
+        patch("git_projects.cli.config.load_config", side_effect=FileNotFoundError),
+    ):
+        result = runner.invoke(app, ["list", "proj-a"])
 
     assert result.exit_code == 0
     assert "proj-a" in result.output
     assert "proj-b" not in result.output
 
 
-def test_remote_list_most_recent_last() -> None:
-    with patch("git_projects.cli.index.load_index", return_value=_REMOTE_REPOS):
-        result = runner.invoke(app, ["remote", "list"])
+def test_list_most_recent_last() -> None:
+    with (
+        patch("git_projects.cli.index.load_index", return_value=_REMOTE_REPOS),
+        patch("git_projects.cli.config.load_config", side_effect=FileNotFoundError),
+    ):
+        result = runner.invoke(app, ["list"])
 
     assert result.exit_code == 0
     assert result.output.index("proj-b") < result.output.index("proj-a")
 
 
-def test_remote_list_no_results_for_query() -> None:
-    with patch("git_projects.cli.index.load_index", return_value=_REMOTE_REPOS):
-        result = runner.invoke(app, ["remote", "list", "zzznomatch"])
+def test_list_no_results_for_query() -> None:
+    with (
+        patch("git_projects.cli.index.load_index", return_value=_REMOTE_REPOS),
+        patch("git_projects.cli.config.load_config", side_effect=FileNotFoundError),
+    ):
+        result = runner.invoke(app, ["list", "zzznomatch"])
 
     assert result.exit_code == 0
     assert "No repos" in result.output
+
+
+def test_list_highlights_tracked_project() -> None:
+    cfg = Config(clone_root="~/projects", foundries=[])
+    tracked = [Project(clone_url="git@github.com:user/proj-a.git", name="proj-a", path="proj-a")]
+
+    with (
+        patch("git_projects.cli.index.load_index", return_value=_REMOTE_REPOS),
+        patch("git_projects.cli.config.load_config", return_value=cfg),
+        patch("git_projects.cli.config.load_projects", return_value=tracked),
+    ):
+        result = runner.invoke(app, ["list"])
+
+    assert result.exit_code == 0
+    assert "projects/proj-a" in result.output
 
 
 # --- track ---
@@ -311,7 +338,7 @@ def test_track_by_name_empty_index() -> None:
         result = runner.invoke(app, ["track", "proj-a"])
 
     assert result.exit_code == 1
-    assert "remote fetch" in result.output
+    assert "fetch" in result.output
 
 
 def test_track_duplicate_rejected() -> None:
@@ -366,41 +393,6 @@ def test_untrack_unknown_project() -> None:
 
     assert result.exit_code == 1
     assert "nonexistent" in result.output
-
-
-# --- list ---
-
-
-def test_list_shows_projects() -> None:
-    """AC-10: list reads from load_projects and resolves absolute paths."""
-    cfg = Config(clone_root="~/projects", foundries=[])
-    projects = [
-        Project(clone_url="https://github.com/user/repo-a.git", name="repo-a", path="repo-a")
-    ]
-
-    with (
-        patch("git_projects.cli.config.load_config", return_value=cfg),
-        patch("git_projects.cli.config.load_projects", return_value=projects),
-    ):
-        result = runner.invoke(app, ["list"])
-
-    assert result.exit_code == 0
-    assert "repo-a" in result.output
-    # path resolved to clone_root / path
-    assert "projects/repo-a" in result.output
-
-
-def test_list_empty() -> None:
-    cfg = Config(clone_root="~/projects", foundries=[])
-
-    with (
-        patch("git_projects.cli.config.load_config", return_value=cfg),
-        patch("git_projects.cli.config.load_projects", return_value=[]),
-    ):
-        result = runner.invoke(app, ["list"])
-
-    assert result.exit_code == 0
-    assert "No projects tracked" in result.output
 
 
 # --- info ---

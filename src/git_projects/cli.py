@@ -16,9 +16,7 @@ from git_projects.services import fetch_repos, sync_projects, track_project, unt
 
 app = typer.Typer(no_args_is_help=True)
 config_app = typer.Typer(no_args_is_help=True)
-remote_app = typer.Typer(no_args_is_help=True)
 app.add_typer(config_app, name="config", help="Manage configuration.")
-app.add_typer(remote_app, name="remote", help="Browse and refresh remote repos.")
 
 
 def _version_callback(value: bool) -> None:
@@ -81,7 +79,7 @@ def _load_config_or_exit() -> config.Config:
         raise typer.Exit(code=1) from exc
 
 
-@remote_app.command()
+@app.command()
 def fetch(
     foundry_name: Annotated[str | None, typer.Argument(help="Foundry name to fetch from.")] = None,
 ) -> None:
@@ -110,32 +108,42 @@ def fetch(
     print(f"\r\033[K{summary}")
 
 
-@remote_app.command(name="list")
-def remote_list(
+@app.command(name="list")
+def list_repos(
     query: Annotated[
         str | None, typer.Argument(help="Filter by name or description substring.")
     ] = None,
 ) -> None:
-    """Show repos from local index."""
+    """Show repos from local index. Tracked projects are highlighted with their local path."""
     repos = index.load_index()
 
     if not repos:
-        print("Index is empty. Run 'git-projects remote fetch' first.")
+        print("Index is empty. Run 'git-projects fetch' first.")
         raise typer.Exit(code=1)
 
-    repos = index.search_index(repos, query, max_age_days=None)
+    repos = index.search_index(repos, query)
 
     if not repos:
         hint = f" matching '{query}'" if query else ""
         print(f"No repos{hint} in index.")
         return
 
+    # Build lookup of tracked clone_urls → absolute paths
+    tracked: dict[str, str] = {}
+    try:
+        cfg = config.load_config()
+        clone_root = str(Path(cfg.clone_root).expanduser())
+        for p in config.load_projects():
+            tracked[p.clone_url] = str(Path(clone_root) / p.path)
+    except FileNotFoundError:
+        pass
+
     summary = typer.style(f"{len(repos)} repos", bold=True)
     print(f"{summary}\n{'─' * 60}")
 
     for repo in repos:
         print()
-        print(format_repo(repo), end="")
+        print(format_repo(repo, tracked_path=tracked.get(repo.clone_url)), end="")
 
 
 @app.command()
@@ -234,22 +242,6 @@ def info() -> None:
             f"Index     {typer.style(str(index_path), dim=True)}  "
             f"{typer.style('(not found)', dim=True)}"
         )
-
-
-@app.command(name="list")
-def list_projects() -> None:
-    """Show tracked projects."""
-    cfg = _load_config_or_exit()
-    projects = config.load_projects()
-
-    if not projects:
-        print("No projects tracked. Use 'git-projects track <name>' to add one.")
-        return
-
-    clone_root = str(Path(cfg.clone_root).expanduser())
-    for project in projects:
-        abs_path = str(Path(clone_root) / project.path)
-        print(f"{project.name}  {abs_path}")
 
 
 @app.command()

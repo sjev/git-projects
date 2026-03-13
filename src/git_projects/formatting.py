@@ -36,7 +36,9 @@ def format_header(name: str, count: int, width: int = 60) -> str:
     return f"\n{label}\n{'─' * width}"
 
 
-def format_repo(repo: RemoteRepo, width: int = 60, max_desc: int = 60) -> str:
+def format_repo(
+    repo: RemoteRepo, width: int = 60, max_desc: int = 60, tracked_path: str | None = None
+) -> str:
     """Return an indented multi-line block describing one remote repo."""
     date = relative_time(repo.pushed_at)
     vis_label = f"[{repo.visibility}]"
@@ -63,4 +65,6 @@ def format_repo(repo: RemoteRepo, width: int = 60, max_desc: int = 60) -> str:
         if len(desc) > max_desc:
             desc = desc[: max_desc - 1] + "…"
         lines.append(f"  {desc}")
+    if tracked_path:
+        lines.append(f"  {typer.style(f'→ {tracked_path}', fg=typer.colors.BRIGHT_GREEN)}")
     return "\n".join(lines) + "\n"
