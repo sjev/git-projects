@@ -24,7 +24,7 @@ A developer working across multiple git foundries (GitHub, GitLab, self-hosted G
 
 ## System overview
 
-The tool is a local CLI application. `remote fetch` calls foundry APIs concurrently, saves results to a local index (`index.json`), and prints a summary. `remote list` reads the index and filters by query/recency — no network required. `track` accepts a repo name (looked up from the index) or a direct clone URL. `sync` clones missing and pulls existing tracked repos. `list` shows tracked projects.
+The tool is a local CLI application. `fetch` calls foundry APIs concurrently, saves results to a local index (`index.json`), and prints a summary. `list` reads the index and shows all repos — tracked projects are highlighted with their local path in bright green. `track` accepts a repo name (looked up from the index) or a direct clone URL. `sync` clones missing and pulls existing tracked repos.
 
 ```mermaid
 graph LR
@@ -62,21 +62,19 @@ graph LR
 |---|---|
 | `config init` | Create default config file |
 | `config show` | Show config file path and contents |
-| `remote fetch [foundry]` | Fetch repos from foundry APIs concurrently, save to local index |
-| `remote list [query]` | Show repos from local index; optional name/description filter |
+| `fetch [foundry]` | Fetch repos from foundry APIs concurrently, save to local index |
+| `list [query]` | Show all repos from index; tracked projects highlighted with local path |
 | `track <slug\|name\|url> [--path <dir>]` | Add a project — slug or name looked up in index, or direct clone URL |
 | `untrack <name>` | Remove a project from projects.json |
-| `list` | Show tracked projects |
 | `sync` | Clone missing repos, pull existing tracked repos |
 
 ### Workflow
 
 ```
-remote fetch            → hit APIs, save all repos to local index
-remote list [query]     → browse index (fast, no network)
+fetch [foundry]         → hit APIs, save all repos to local index
+list [query]            → browse index (tracked repos shown with green local path)
 track <name>            → add by name from index
 sync                    → clone & pull all tracked projects
-list                    → see what you're tracking
 untrack <name>          → stop tracking a project
 ```
 
@@ -84,7 +82,7 @@ untrack <name>          → stop tracking a project
 
 ### `cli` — Command-line interface
 - **Owns**: Argument parsing, output formatting, subcommand dispatch.
-- **Public interface**: `app` (typer instance) with commands: `config` (group: `init`, `show`), `remote` (group: `fetch`, `list`), `track`, `untrack`, `list`, `sync`, `info`.
+- **Public interface**: `app` (typer instance) with commands: `config` (group: `init`, `show`), `fetch`, `list`, `track`, `untrack`, `sync`, `info`.
 - **Must NOT**: Contain business logic, call git directly, or manage state.
 
 ### `config` — Configuration and project tracking
@@ -137,7 +135,7 @@ untrack <name>          → stop tracking a project
 
 ### `index` — Local repo index
 - **Owns**: Reading/writing `index.json`, filtering and sorting cached repo metadata.
-- **Public interface**: `save_index(repos: list[RemoteRepo]) -> Path`, `load_index() -> list[RemoteRepo]`, `search_index(repos, query, max_age_days) -> list[RemoteRepo]`.
+- **Public interface**: `save_index(repos: list[RemoteRepo]) -> Path`, `load_index() -> list[RemoteRepo]`, `search_index(repos, query) -> list[RemoteRepo]`.
 - **Storage**: `$XDG_DATA_HOME/git-projects/index.json` — JSON array of all repos from the last `remote fetch`.
 - **Must NOT**: Call APIs, modify config, or run git commands.
 
@@ -158,12 +156,11 @@ untrack <name>          → stop tracking a project
 All communication is **synchronous function calls**. No events, no message queues. The CLI orchestrates:
 1. `config init`: config (create default config, print path)
 2. `config show`: config (load config, print path + content)
-3. `remote fetch`: foundry (concurrent API calls) → index (save all repos) → print summary
-4. `remote list`: index (load + filter) → print repos
+3. `fetch`: foundry (concurrent API calls) → index (save all repos) → print summary
+4. `list`: index (load + search) + config (load projects for tracking status) → print repos with tracked highlights
 5. `track`: index (slug/name lookup, optional) → config (add project to projects.json)
 6. `untrack`: config (remove project from projects.json)
-7. `list`: config (load projects, print)
-8. `sync`: config (load projects) → gitops (clone missing, pull existing)
+7. `sync`: config (load projects) → gitops (clone missing, pull existing)
 
 ## Key architectural decisions
 
