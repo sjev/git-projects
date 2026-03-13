@@ -599,8 +599,8 @@ def test_sync_prints_summary_line() -> None:
 def test_sync_on_project_callback_is_called() -> None:
     def fake_sync(projects, on_project=None, max_workers=4):
         if on_project:
-            on_project("a", "synced")
-            on_project("b", "skipped (dirty)")
+            on_project("a", "synced", [])
+            on_project("b", "skipped (dirty)", [])
         return SyncResult(synced=["a"], skipped=["b"])
 
     with (

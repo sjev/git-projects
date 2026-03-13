@@ -126,12 +126,13 @@ class SyncResult:
 
 def sync_projects(
     projects: list[Project],
-    on_project: Callable[[str, str], None] | None = None,
+    on_project: Callable[[str, str, list[tuple[str, str]]], None] | None = None,
     max_workers: int = 4,
 ) -> SyncResult:
     """Clone missing repos and pull+push existing ones, in parallel.
 
-    Calls on_project(name, status_message) for each project as it is processed.
+    Calls on_project(name, status_message, git_ops) for each project as it is processed.
+    git_ops is a list of (cmd_display, output) pairs for the git commands run.
     Dirty repos are skipped; git errors are recorded and processing continues.
     """
     result = SyncResult()
@@ -141,38 +142,44 @@ def sync_projects(
         expanded = str(Path(project.path).expanduser())
 
         if not Path(expanded).exists():
+            git_ops: list[tuple[str, str]] = []
             try:
-                clone_repo(project.clone_url, project.path)
+                cmd = f"git clone {project.clone_url} {expanded}"
+                output = clone_repo(project.clone_url, project.path)
+                git_ops.append((cmd, output))
                 with lock:
                     result.cloned.append(project.name)
                     if on_project:
-                        on_project(project.name, "cloned")
+                        on_project(project.name, "cloned", git_ops)
             except GitError as exc:
                 with lock:
                     result.errored.append((project.name, str(exc)))
                     if on_project:
-                        on_project(project.name, f"error: {exc}")
+                        on_project(project.name, f"error: {exc}", git_ops)
             return
 
         if is_dirty(project.path):
             with lock:
                 result.skipped.append(project.name)
                 if on_project:
-                    on_project(project.name, "skipped (dirty)")
+                    on_project(project.name, "skipped (dirty)", [])
             return
 
+        git_ops = []
         try:
-            pull_repo(project.path)
-            push_repo(project.path)
+            pull_output = pull_repo(project.path)
+            git_ops.append((f"git -C {expanded} pull", pull_output))
+            push_output = push_repo(project.path)
+            git_ops.append((f"git -C {expanded} push", push_output))
             with lock:
                 result.synced.append(project.name)
                 if on_project:
-                    on_project(project.name, "synced")
+                    on_project(project.name, "synced", git_ops)
         except GitError as exc:
             with lock:
                 result.errored.append((project.name, str(exc)))
                 if on_project:
-                    on_project(project.name, f"error: {exc}")
+                    on_project(project.name, f"error: {exc}", git_ops)
 
     with ThreadPoolExecutor(max_workers=max(1, max_workers)) as executor:
         futures = [executor.submit(_sync_one, p) for p in projects]

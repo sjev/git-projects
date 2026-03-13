@@ -376,7 +376,7 @@ def test_sync_calls_on_project_callback(tmp_path: Path) -> None:
         patch("git_projects.services.pull_repo"),
         patch("git_projects.services.push_repo"),
     ):
-        sync_projects([project], on_project=lambda n, s: calls.append((n, s)))
+        sync_projects([project], on_project=lambda n, s, ops: calls.append((n, s)))
 
     assert calls == [("a", "synced")]
 

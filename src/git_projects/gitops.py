@@ -22,7 +22,7 @@ def is_dirty(path: str) -> bool:
     return bool(result.stdout.strip())
 
 
-def clone_repo(url: str, path: str) -> None:
+def clone_repo(url: str, path: str) -> str:
     """Clone *url* into *path*, creating parent directories as needed."""
     expanded = _expand(path)
     expanded.parent.mkdir(parents=True, exist_ok=True)
@@ -33,9 +33,10 @@ def clone_repo(url: str, path: str) -> None:
     )
     if result.returncode != 0:
         raise GitError(result.stderr)
+    return (result.stdout + result.stderr).strip()
 
 
-def pull_repo(path: str) -> None:
+def pull_repo(path: str) -> str:
     """Pull the current branch in *path*."""
     result = subprocess.run(
         ["git", "-C", str(_expand(path)), "pull"],
@@ -44,9 +45,10 @@ def pull_repo(path: str) -> None:
     )
     if result.returncode != 0:
         raise GitError(result.stderr)
+    return (result.stdout + result.stderr).strip()
 
 
-def push_repo(path: str) -> None:
+def push_repo(path: str) -> str:
     """Push the current branch in *path* to its configured upstream."""
     result = subprocess.run(
         ["git", "-C", str(_expand(path)), "push"],
@@ -55,3 +57,4 @@ def push_repo(path: str) -> None:
     )
     if result.returncode != 0:
         raise GitError(result.stderr)
+    return (result.stdout + result.stderr).strip()

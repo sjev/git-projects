@@ -271,10 +271,14 @@ def sync(
         "skipped (dirty)": "yellow",
     }
 
-    def _on_project(name: str, status: str) -> None:
+    def _on_project(name: str, status: str, git_ops: list[tuple[str, str]]) -> None:
         color = _STATUS_COLOR.get(status, "red")
         label = typer.style(status, fg=color)
         print(f"  {name}  {label}")
+        for cmd, output in git_ops:
+            print(typer.style(f"    {cmd}", dim=True))
+            if output:
+                print(typer.style(f"    {output}", dim=True))
 
     result = sync_projects(resolved, on_project=_on_project, max_workers=workers)
 
