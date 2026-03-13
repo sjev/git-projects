@@ -70,7 +70,7 @@ def track_project(cfg: Config, name_or_url: str, path: str | None = None) -> Pro
     else:
         repos = index.load_index()
         if not repos:
-            raise ValueError("Index is empty. Run 'git-projects remote fetch' first.")
+            raise ValueError("Index is empty. Run 'git-projects fetch' first.")
         exact = [r for r in repos if r.name == name_or_url or r.slug == name_or_url]
         if len(exact) == 1:
             clone_url = exact[0].clone_url
