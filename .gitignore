@@ -60,3 +60,4 @@ tmp/
 temp/
 .claude/skills/
 .github/skills/
+uv.lock
