@@ -36,11 +36,11 @@ gpr config init
 # Edit ~/.local/share/git-projects/config.yaml to add your API tokens
 
 # Fetch all repos from configured foundries
-gpr remote fetch
+gpr fetch
 
-# Browse what's available
-gpr remote list
-gpr remote list myproject    # filter by name
+# Browse what's available (tracked projects are highlighted with their path)
+gpr list
+gpr list myproject    # filter by name
 
 # Track a repo by name (resolved from index) or URL
 gpr track my-repo
@@ -48,9 +48,6 @@ gpr track git@github.com:user/repo.git
 
 # Clone missing repos, pull & push existing ones
 gpr sync
-
-# See what you're tracking
-gpr list
 
 # Stop tracking
 gpr untrack my-repo
@@ -62,13 +59,12 @@ gpr untrack my-repo
 |---|---|
 | `config init` | Create default config file |
 | `config show` | Show config path and contents |
-| `remote fetch [foundry]` | Fetch repos from foundry APIs, save to local index |
-| `remote list [query] [--all]` | Browse repos from local index (no network) |
+| `fetch [foundry]` | Fetch repos from foundry APIs, save to local index |
+| `list [query]` | Browse indexed repos (tracked projects highlighted with path) |
 | `track <name\|url> [--path]` | Add a project to tracking |
 | `untrack <name>` | Remove a project from tracking |
-| `list` | Show tracked projects |
-| `sync` | Clone missing, pull & push existing tracked repos |
-| `info` | Show version, paths, and counts |
+| `sync [--workers N]` | Clone missing repos, pull & push existing tracked repos |
+| `info` | Show version, paths, and repo counts |
 
 ## Configuration
 
