@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 from platformdirs import user_data_path
@@ -60,21 +60,12 @@ def load_index() -> list[RemoteRepo]:
 def search_index(
     repos: list[RemoteRepo],
     query: str | None = None,
-    *,
-    max_age_days: int | None = 180,
 ) -> list[RemoteRepo]:
-    """Filter repos by optional name/description query and recency cutoff."""
+    """Filter repos by optional name/description query."""
     result = repos
     if query:
         q = query.lower()
         result = [
             r for r in result if q in r.name.lower() or q in r.slug or q in r.description.lower()
-        ]
-    if max_age_days is not None:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
-        result = [
-            r
-            for r in result
-            if datetime.fromisoformat(r.pushed_at.replace("Z", "+00:00")) >= cutoff
         ]
     return sorted(result, key=lambda r: r.pushed_at)

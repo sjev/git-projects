@@ -65,44 +65,23 @@ def test_load_index_returns_empty_when_missing(
 
 
 def test_search_index_no_filter() -> None:
-    result = search_index(_REPOS, max_age_days=None)
+    result = search_index(_REPOS)
     assert len(result) == 3
 
 
 def test_search_index_filters_by_query_name() -> None:
-    result = search_index(_REPOS, "proj-a", max_age_days=None)
+    result = search_index(_REPOS, "proj-a")
     assert len(result) == 1
     assert result[0].name == "proj-a"
 
 
 def test_search_index_filters_by_query_description() -> None:
-    result = search_index(_REPOS, "ancient", max_age_days=None)
+    result = search_index(_REPOS, "ancient")
     assert len(result) == 1
     assert result[0].name == "old-thing"
 
 
 def test_search_index_query_is_case_insensitive() -> None:
-    result = search_index(_REPOS, "ALPHA", max_age_days=None)
+    result = search_index(_REPOS, "ALPHA")
     assert len(result) == 1
     assert result[0].name == "proj-a"
-
-
-def test_search_index_filters_by_age() -> None:
-    result = search_index(_REPOS, max_age_days=180)
-    names = [r.name for r in result]
-    assert "proj-a" in names
-    assert "proj-b" in names
-    assert "old-thing" not in names
-
-
-def test_search_index_age_none_shows_all() -> None:
-    result = search_index(_REPOS, max_age_days=None)
-    assert len(result) == 3
-
-
-def test_search_index_combined_query_and_age() -> None:
-    result = search_index(_REPOS, "proj", max_age_days=180)
-    names = [r.name for r in result]
-    assert "proj-a" in names
-    assert "proj-b" in names
-    assert "old-thing" not in names
