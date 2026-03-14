@@ -4,6 +4,7 @@ import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
+import typer
 
 from git_projects.formatting import format_repo, relative_time
 from git_projects.foundry import RemoteRepo
@@ -102,6 +103,12 @@ def test_format_repo_no_description_line_when_empty() -> None:
 
 def test_format_repo_ends_with_newline() -> None:
     assert format_repo(_REPO).endswith("\n")
+
+
+def test_format_repo_tracked_path_uses_bright_blue() -> None:
+    tracked_path = "/tmp/my-app"
+    out = format_repo(_REPO, tracked_path=tracked_path)
+    assert typer.style(f"→ {tracked_path}", fg=typer.colors.BRIGHT_BLUE) in out
 
 
 def test_format_repo_visibility_badge_public() -> None:

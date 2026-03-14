@@ -66,5 +66,5 @@ def format_repo(
             desc = desc[: max_desc - 1] + "…"
         lines.append(f"  {desc}")
     if tracked_path:
-        lines.append(f"  {typer.style(f'→ {tracked_path}', fg=typer.colors.BRIGHT_GREEN)}")
+        lines.append(f"  {typer.style(f'→ {tracked_path}', fg=typer.colors.BRIGHT_BLUE)}")
     return "\n".join(lines) + "\n"
