@@ -15,12 +15,13 @@ from git_projects.gitops import GitError, clone_repo, is_dirty, pull_repo, push_
 def fetch_repos(
     cfg: Config,
     foundry_name: str | None = None,
+    on_foundry: Callable[[str, int, Exception | None], None] | None = None,
 ) -> list[RemoteRepo]:
     """Fetch repos from configured foundries concurrently, save to local index.
 
+    Calls on_foundry(name, repo_count, error) for each foundry as it completes.
     Returns all repos sorted by pushed_at ascending (oldest first).
     Raises ValueError if foundry_name is given but not found.
-    Lets httpx.HTTPStatusError and ValueError (missing token) propagate.
     """
     foundries = cfg.foundries
     if foundry_name:
@@ -40,14 +41,20 @@ def fetch_repos(
             list_fn = gitea.list_repos
         else:
             return
-        repos = list_fn(fc, cfg.clone_url_format)
-        with lock:
-            all_repos.extend(repos)
+        try:
+            repos = list_fn(fc, cfg.clone_url_format)
+            with lock:
+                all_repos.extend(repos)
+            if on_foundry:
+                on_foundry(fc.name, len(repos), None)
+        except Exception as exc:
+            if on_foundry:
+                on_foundry(fc.name, 0, exc)
 
     with ThreadPoolExecutor(max_workers=max(1, len(foundries))) as executor:
         futures = [executor.submit(_fetch_one, fc) for fc in foundries]
         for future in as_completed(futures):
-            future.result()  # re-raise any API or token errors
+            future.result()
 
     all_repos.sort(key=lambda r: r.pushed_at)
     index.save_index(all_repos)

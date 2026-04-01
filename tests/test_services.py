@@ -111,11 +111,20 @@ def test_fetch_repos_unknown_foundry() -> None:
 def test_fetch_repos_missing_token() -> None:
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
+    errors: list[tuple[str, Exception]] = []
+
+    def _on_foundry(name: str, count: int, exc: Exception | None) -> None:
+        if exc is not None:
+            errors.append((name, exc))
+
     with (
         patch("git_projects.services.github.list_repos", side_effect=ValueError("token")),
-        pytest.raises(ValueError, match="token"),
+        patch("git_projects.services.index.save_index"),
     ):
-        fetch_repos(cfg)
+        fetch_repos(cfg, on_foundry=_on_foundry)
+
+    assert len(errors) == 1
+    assert "token" in str(errors[0][1])
 
 
 # --- track_project (URL) ---

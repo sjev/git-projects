@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated
@@ -86,26 +85,35 @@ def fetch(
     """Fetch repos from foundry APIs and save to local index."""
     cfg = _load_config_or_exit()
 
-    sys.stdout.write("Fetching...")
-    sys.stdout.flush()
+    errors: list[str] = []
+
+    def _on_foundry(name: str, count: int, exc: Exception | None) -> None:
+        if exc is None:
+            status = typer.style("ok", fg="green")
+            print(f"  {name:<20} {status}  ({count} repos)")
+        else:
+            status = typer.style("error", fg="red")
+            if isinstance(exc, httpx.HTTPStatusError):
+                detail = f"HTTP {exc.response.status_code}"
+                if exc.response.status_code == 401:
+                    detail += " (check your token)"
+            else:
+                detail = str(exc)
+            print(f"  {name:<20} {status}  {detail}")
+            errors.append(name)
 
     try:
-        repos = fetch_repos(cfg, foundry_name)
+        repos = fetch_repos(cfg, foundry_name, on_foundry=_on_foundry)
     except ValueError as exc:
-        sys.stdout.write("\r\033[K")
         print(exc)
-        raise typer.Exit(code=1) from None
-    except httpx.HTTPStatusError as exc:
-        sys.stdout.write("\r\033[K")
-        if exc.response.status_code == 401:
-            print(f"Error: API returned 401 for foundry '{foundry_name}'. Check your token.")
-        else:
-            print(f"Error: API returned {exc.response.status_code} for foundry '{foundry_name}'.")
         raise typer.Exit(code=1) from None
 
     n_foundries = len(cfg.foundries) if foundry_name is None else 1
     summary = typer.style(f"Fetched {len(repos)} repos from {n_foundries} foundries", bold=True)
-    print(f"\r\033[K{summary}")
+    print(summary)
+
+    if errors:
+        raise typer.Exit(code=1)
 
 
 @app.command(name="list")
