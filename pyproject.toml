@@ -1,6 +1,6 @@
 [project]
 name = "git-proj"
-version = "0.5.1"
+version = "0.5.2"
 description = "Discover, track, and sync Git repos across GitHub, GitLab, and Gitea"
 readme = "README.md"
 license = {text = "MIT"}
@@ -78,7 +78,7 @@ ignore = [
 "tests/*" = ["ARG001"]  # Allow unused arguments in tests
 
 [tool.bumpversion]
-current_version = "0.5.1"
+current_version = "0.5.2"
 commit = true
 tag = true
 
