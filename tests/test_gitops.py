@@ -34,6 +34,7 @@ def test_is_dirty_returns_true_when_output() -> None:
         ["git", "-C", "/repo", "status", "--porcelain"],
         capture_output=True,
         text=True,
+        timeout=30,
     )
 
 
@@ -61,6 +62,7 @@ def test_clone_repo_runs_git_clone(tmp_path: Path) -> None:
         ["git", "clone", "https://example.com/repo.git", target],
         capture_output=True,
         text=True,
+        timeout=30,
     )
 
 
@@ -100,6 +102,7 @@ def test_pull_repo_runs_git_pull() -> None:
         ["git", "-C", "/repo", "pull"],
         capture_output=True,
         text=True,
+        timeout=30,
     )
 
 
@@ -128,6 +131,7 @@ def test_push_repo_runs_git_push() -> None:
         ["git", "-C", "/repo", "push"],
         capture_output=True,
         text=True,
+        timeout=30,
     )
 
 
