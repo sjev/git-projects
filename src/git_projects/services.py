@@ -67,10 +67,11 @@ def _is_url(s: str) -> bool:
 
 
 def track_project(cfg: Config, name_or_url: str, path: str | None = None) -> Project:
-    """Add a project to tracking and save config.
+    """Add a project to tracking and clone it immediately.
 
     Accepts a clone URL (HTTPS/SSH) or a repo name looked up in the local index.
     Raises ValueError if already tracked, name not found, or name is ambiguous.
+    Raises GitError if the clone fails.
     """
     if _is_url(name_or_url):
         clone_url = name_or_url
@@ -108,6 +109,9 @@ def track_project(cfg: Config, name_or_url: str, path: str | None = None) -> Pro
     else:
         project = config.derive_project(clone_url)
     config.save_projects([*projects, project])
+
+    clone_path = str(Path(cfg.clone_root).expanduser() / project.path)
+    clone_repo(project.clone_url, clone_path)
     return project
 
 

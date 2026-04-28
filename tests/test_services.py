@@ -137,6 +137,7 @@ def test_track_project_by_url() -> None:
     with (
         patch("git_projects.services.config.load_projects", return_value=[]) as mock_load,
         patch("git_projects.services.config.save_projects") as mock_save,
+        patch("git_projects.services.clone_repo", return_value="") as mock_clone,
     ):
         project = track_project(cfg, "https://github.com/user/repo-a.git")
 
@@ -144,6 +145,7 @@ def test_track_project_by_url() -> None:
     assert project.path == "repo-a"
     mock_load.assert_called_once()
     mock_save.assert_called_once_with([project])
+    mock_clone.assert_called_once()
 
 
 def test_track_project_duplicate() -> None:
@@ -172,6 +174,7 @@ def test_track_project_by_name() -> None:
         patch("git_projects.services.index.load_index", return_value=_REMOTE_REPOS),
         patch("git_projects.services.config.load_projects", return_value=[]),
         patch("git_projects.services.config.save_projects"),
+        patch("git_projects.services.clone_repo", return_value=""),
     ):
         project = track_project(cfg, "proj-a")
 
@@ -186,6 +189,7 @@ def test_track_project_by_partial_name() -> None:
         patch("git_projects.services.index.load_index", return_value=_REMOTE_REPOS),
         patch("git_projects.services.config.load_projects", return_value=[]),
         patch("git_projects.services.config.save_projects"),
+        patch("git_projects.services.clone_repo", return_value=""),
     ):
         project = track_project(cfg, "proj-a")
 

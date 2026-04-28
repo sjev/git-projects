@@ -290,7 +290,10 @@ def test_track_adds_project_by_url(tmp_path: Path, monkeypatch: pytest.MonkeyPat
 
     cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
 
-    with patch("git_projects.cli.config.load_config", return_value=cfg):
+    with (
+        patch("git_projects.cli.config.load_config", return_value=cfg),
+        patch("git_projects.services.clone_repo", return_value=""),
+    ):
         result = runner.invoke(app, ["track", "https://github.com/user/repo-a.git"])
 
     assert result.exit_code == 0
@@ -304,7 +307,10 @@ def test_track_ssh_url(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
     cfg = Config(clone_root="~/projects", foundries=[])
 
-    with patch("git_projects.cli.config.load_config", return_value=cfg):
+    with (
+        patch("git_projects.cli.config.load_config", return_value=cfg),
+        patch("git_projects.services.clone_repo", return_value=""),
+    ):
         result = runner.invoke(app, ["track", "git@github.com:user/repo-a.git"])
 
     assert result.exit_code == 0
@@ -321,6 +327,7 @@ def test_track_by_name_from_index(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     with (
         patch("git_projects.cli.config.load_config", return_value=cfg),
         patch("git_projects.services.index.load_index", return_value=_REMOTE_REPOS),
+        patch("git_projects.services.clone_repo", return_value=""),
     ):
         result = runner.invoke(app, ["track", "proj-a"])
 

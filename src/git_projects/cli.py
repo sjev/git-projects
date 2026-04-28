@@ -11,6 +11,7 @@ import typer
 
 from git_projects import config, index
 from git_projects.formatting import format_repo
+from git_projects.gitops import GitError
 from git_projects.services import fetch_repos, sync_projects, track_project, untrack_project
 
 app = typer.Typer(no_args_is_help=True)
@@ -163,12 +164,12 @@ def track(
         str | None, typer.Option("--path", "-p", help="Override local clone path.")
     ] = None,
 ) -> None:
-    """Add a project to tracking."""
+    """Add a project to tracking and clone it."""
     cfg = _load_config_or_exit()
 
     try:
         project = track_project(cfg, name_or_url, path)
-    except ValueError as exc:
+    except (ValueError, GitError) as exc:
         print(exc)
         raise typer.Exit(code=1) from None
 
