@@ -135,6 +135,7 @@ def test_fetch_happy_path() -> None:
     with (
         patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
         patch("git_projects.services.index.save_index"),
+        patch("git_projects.services.index.load_index", return_value=[]),
         patch("git_projects.cli.config.load_config", return_value=cfg),
     ):
         result = runner.invoke(app, ["fetch"])
@@ -149,6 +150,7 @@ def test_fetch_by_foundry_name() -> None:
     with (
         patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
         patch("git_projects.services.index.save_index"),
+        patch("git_projects.services.index.load_index", return_value=[]),
         patch("git_projects.cli.config.load_config", return_value=cfg),
     ):
         result = runner.invoke(app, ["fetch", "github"])

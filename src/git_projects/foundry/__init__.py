@@ -13,6 +13,7 @@ class RemoteRepo:
     default_branch: str
     visibility: str
     description: str
+    foundry_name: str = ""
 
     @property
     def slug(self) -> str:

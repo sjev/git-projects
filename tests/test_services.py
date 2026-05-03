@@ -43,6 +43,7 @@ def test_fetch_repos_returns_repos() -> None:
     with (
         patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
         patch("git_projects.services.index.save_index"),
+        patch("git_projects.services.index.load_index", return_value=[]),
     ):
         result = fetch_repos(cfg)
 
@@ -55,6 +56,7 @@ def test_fetch_repos_sorted_ascending() -> None:
     with (
         patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
         patch("git_projects.services.index.save_index"),
+        patch("git_projects.services.index.load_index", return_value=[]),
     ):
         result = fetch_repos(cfg)
 
@@ -68,6 +70,7 @@ def test_fetch_repos_saves_to_index() -> None:
     with (
         patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
         patch("git_projects.services.index.save_index") as mock_save,
+        patch("git_projects.services.index.load_index", return_value=[]),
     ):
         fetch_repos(cfg)
 
@@ -82,6 +85,7 @@ def test_fetch_repos_by_foundry_name() -> None:
     with (
         patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS),
         patch("git_projects.services.index.save_index"),
+        patch("git_projects.services.index.load_index", return_value=[]),
     ):
         result = fetch_repos(cfg, "github")
 
@@ -94,6 +98,7 @@ def test_fetch_repos_passes_clone_url_format() -> None:
     with (
         patch("git_projects.services.github.list_repos", return_value=_REMOTE_REPOS) as mock_lr,
         patch("git_projects.services.index.save_index"),
+        patch("git_projects.services.index.load_index", return_value=[]),
     ):
         fetch_repos(cfg)
 
@@ -120,11 +125,69 @@ def test_fetch_repos_missing_token() -> None:
     with (
         patch("git_projects.services.github.list_repos", side_effect=ValueError("token")),
         patch("git_projects.services.index.save_index"),
+        patch("git_projects.services.index.load_index", return_value=[]),
     ):
         fetch_repos(cfg, on_foundry=_on_foundry)
 
     assert len(errors) == 1
     assert "token" in str(errors[0][1])
+
+
+def test_fetch_repos_partial_preserves_other_foundries() -> None:
+    """Fetching one foundry must not erase entries from other foundries."""
+    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
+    existing = [
+        RemoteRepo(
+            name="gl-proj",
+            repo_url="https://gitlab.com/u/gl-proj",
+            clone_url="git@gitlab.com:u/gl-proj.git",
+            pushed_at="2025-01-01T00:00:00Z",
+            default_branch="main",
+            visibility="public",
+            description="",
+            foundry_name="gitlab",
+        )
+    ]
+    fresh = [RemoteRepo(**{**vars(_REMOTE_REPOS[0]), "foundry_name": "github"})]
+
+    with (
+        patch("git_projects.services.github.list_repos", return_value=fresh),
+        patch("git_projects.services.index.load_index", return_value=existing),
+        patch("git_projects.services.index.save_index") as mock_save,
+    ):
+        fetch_repos(cfg, "github")
+
+    saved = mock_save.call_args[0][0]
+    names = {r.name for r in saved}
+    assert "gl-proj" in names  # preserved
+    assert "proj-a" in names  # newly fetched
+
+
+def test_fetch_repos_failed_foundry_preserves_existing_entries() -> None:
+    """A failed fetch must not wipe that foundry's existing index entries."""
+    cfg = Config(clone_root="~/projects", foundries=[_GH_FOUNDRY])
+    existing = [
+        RemoteRepo(
+            name="gh-old",
+            repo_url="https://github.com/u/gh-old",
+            clone_url="git@github.com:u/gh-old.git",
+            pushed_at="2025-01-01T00:00:00Z",
+            default_branch="main",
+            visibility="public",
+            description="",
+            foundry_name="github",
+        )
+    ]
+
+    with (
+        patch("git_projects.services.github.list_repos", side_effect=RuntimeError("boom")),
+        patch("git_projects.services.index.load_index", return_value=existing),
+        patch("git_projects.services.index.save_index") as mock_save,
+    ):
+        fetch_repos(cfg)
+
+    saved = mock_save.call_args[0][0]
+    assert [r.name for r in saved] == ["gh-old"]
 
 
 # --- track_project (URL) ---

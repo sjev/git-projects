@@ -29,6 +29,7 @@ def save_index(repos: list[RemoteRepo]) -> Path:
                 "default_branch": r.default_branch,
                 "visibility": r.visibility,
                 "description": r.description,
+                "foundry_name": r.foundry_name,
             }
             for r in repos
         ],
@@ -52,6 +53,7 @@ def load_index() -> list[RemoteRepo]:
             default_branch=r["default_branch"],
             visibility=r["visibility"],
             description=r["description"],
+            foundry_name=r.get("foundry_name", ""),
         )
         for r in raw.get("repos", [])
     ]

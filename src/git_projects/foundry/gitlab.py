@@ -44,6 +44,7 @@ def list_repos(config: FoundryConfig, clone_url_format: str = "ssh") -> list[Rem
                         default_branch=item.get("default_branch") or "",
                         visibility=item["visibility"],
                         description=item["description"] or "",
+                        foundry_name=config.name,
                     )
                 )
             url = _next_url(response.headers.get("Link", ""))

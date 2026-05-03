@@ -30,7 +30,8 @@ def fetch_repos(
             raise ValueError(f"No foundry named '{foundry_name}' in config.")
 
     lock = threading.Lock()
-    all_repos: list[RemoteRepo] = []
+    fetched: list[RemoteRepo] = []
+    succeeded: set[str] = set()
 
     def _fetch_one(fc: config.FoundryConfig) -> None:
         if fc.type == "github":
@@ -44,7 +45,8 @@ def fetch_repos(
         try:
             repos = list_fn(fc, cfg.clone_url_format)
             with lock:
-                all_repos.extend(repos)
+                fetched.extend(repos)
+                succeeded.add(fc.name)
             if on_foundry:
                 on_foundry(fc.name, len(repos), None)
         except Exception as exc:
@@ -56,6 +58,11 @@ def fetch_repos(
         for future in as_completed(futures):
             future.result()
 
+    # Preserve entries from foundries that weren't fetched (partial fetch) or
+    # whose fetch failed (transient error shouldn't erase the cache).
+    existing = index.load_index()
+    preserved = [r for r in existing if r.foundry_name not in succeeded]
+    all_repos = preserved + fetched
     all_repos.sort(key=lambda r: r.pushed_at)
     index.save_index(all_repos)
     return all_repos
