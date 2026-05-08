@@ -82,6 +82,10 @@ def _load_config_or_exit() -> config.Config:
 @app.command()
 def fetch(
     foundry_name: Annotated[str | None, typer.Argument(help="Foundry name to fetch from.")] = None,
+    clean: Annotated[
+        bool,
+        typer.Option("--clean", help="Discard existing index and replace with fetched repos."),
+    ] = False,
 ) -> None:
     """Fetch repos from foundry APIs and save to local index."""
     cfg = _load_config_or_exit()
@@ -104,7 +108,7 @@ def fetch(
             errors.append(name)
 
     try:
-        repos = fetch_repos(cfg, foundry_name, on_foundry=_on_foundry)
+        repos = fetch_repos(cfg, foundry_name, on_foundry=_on_foundry, clean=clean)
     except ValueError as exc:
         print(exc)
         raise typer.Exit(code=1) from None

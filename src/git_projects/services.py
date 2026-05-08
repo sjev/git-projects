@@ -16,12 +16,14 @@ def fetch_repos(
     cfg: Config,
     foundry_name: str | None = None,
     on_foundry: Callable[[str, int, Exception | None], None] | None = None,
+    clean: bool = False,
 ) -> list[RemoteRepo]:
     """Fetch repos from configured foundries concurrently, save to local index.
 
     Calls on_foundry(name, repo_count, error) for each foundry as it completes.
     Returns all repos sorted by pushed_at ascending (oldest first).
     Raises ValueError if foundry_name is given but not found.
+    If clean is True, the existing index is discarded before saving.
     """
     foundries = cfg.foundries
     if foundry_name:
@@ -58,11 +60,14 @@ def fetch_repos(
         for future in as_completed(futures):
             future.result()
 
-    # Preserve entries from foundries that weren't fetched (partial fetch) or
-    # whose fetch failed (transient error shouldn't erase the cache).
-    existing = index.load_index()
-    preserved = [r for r in existing if r.foundry_name not in succeeded]
-    all_repos = preserved + fetched
+    if clean:
+        all_repos = list(fetched)
+    else:
+        # Preserve entries from foundries that weren't fetched (partial fetch) or
+        # whose fetch failed (transient error shouldn't erase the cache).
+        existing = index.load_index()
+        preserved = [r for r in existing if r.foundry_name not in succeeded]
+        all_repos = preserved + fetched
     all_repos.sort(key=lambda r: r.pushed_at)
     index.save_index(all_repos)
     return all_repos
